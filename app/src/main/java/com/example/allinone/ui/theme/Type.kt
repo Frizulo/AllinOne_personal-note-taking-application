@@ -24,7 +24,7 @@ val bodyFontFamily = FontFamily(
 
 val displayFontFamily = FontFamily(
     Font(
-        googleFont = GoogleFont("ZCOOL KuaiLe"),
+        googleFont = GoogleFont("LXGW WenKai TC"),
         fontProvider = provider,
     )
 )
