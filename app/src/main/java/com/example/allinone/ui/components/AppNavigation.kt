@@ -1,0 +1,72 @@
+package com.example.allinone.ui.components
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Task
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.tooling.preview.Preview
+import com.example.allinone.ui.theme.AppTheme
+
+// 定義導航項目的資料結構
+data class NavItem(
+    val label: String,
+    val icon: ImageVector,
+    val route: String
+)
+
+@Composable
+fun AllInOneBottomBar(
+    currentRoute: String,
+    onNavigate: (String) -> Unit
+) {
+    val navItems = listOf(
+        NavItem("Home", Icons.Default.Home, "home"),
+        NavItem("Tasks", Icons.Default.Task, "tasks"),
+        NavItem("Schedule", Icons.Default.CalendarMonth, "schedule"),
+        NavItem("Saved", Icons.Default.Bookmark, "saved")
+    )
+
+    NavigationBar(
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = NavigationBarDefaults.Elevation
+    ) {
+        navItems.forEach { item ->
+            val isSelected = currentRoute == item.route
+            NavigationBarItem(
+                selected = isSelected,
+                onClick = { onNavigate(item.route) },
+                icon = {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = item.label,
+                        // 選中時使用 Primary 色，未選中使用灰色
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    )
+                },
+                label = {
+                    Text(
+                        text = item.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    )
+                },
+                // 移除選中時的圓形背景框，讓設計更簡潔現代
+                colors = NavigationBarItemDefaults.colors(
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                )
+            )
+        }
+    }
+}
+
+@Preview
+@Composable
+fun BottomBarPreview() {
+    AppTheme {
+        AllInOneBottomBar(currentRoute = "home", onNavigate = {})
+    }
+}
