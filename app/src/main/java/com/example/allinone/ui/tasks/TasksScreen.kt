@@ -21,35 +21,62 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.allinone.ui.components.StandardTaskCard
 import com.example.allinone.ui.components.TaskFilterChip
 import com.example.allinone.ui.theme.AppTheme
+import java.text.SimpleDateFormat
+import java.util.*
+
+// 暫時定義，以便 UI 正常運作，組員開發後可移除
+data class TaskItem(
+    val title: String,
+    val quadrantId: Int,
+    val progress: Int = 0, // 0: not yet, 1: in progress, 2: done
+    val detail: String = "",
+    val dueTime: Long? = null
+) {
+    val statusString: String
+        get() = when (progress) {
+            1 -> "in progress"
+            2 -> "done"
+            else -> "not yet"
+        }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TasksScreen() {
+fun TasksScreen(
+    initialShowEdit: Boolean = false // 用於 Preview 測試彈窗
+) {
     var viewMode by remember { mutableStateOf("list") }
-
-    // 預設全選
     var selectedQuadrants by remember { mutableStateOf(setOf(0, 1, 2, 3, 4)) }
-    var selectedProgress by remember { mutableStateOf(setOf("in progress", "not yet", "done")) }
+    var selectedProgress by remember { mutableStateOf(setOf(0, 1, 2)) } // 改用數值對應資料表
     var searchQuery by remember { mutableStateOf("") }
 
-    // 使用 mutableStateListOf 確保列表變動能觸發 UI 重繪
+    // 控制編輯視窗
+    var showEditScreen by remember { mutableStateOf(initialShowEdit) }
+    var currentEditingTask by remember { mutableStateOf<TaskItem?>(null) }
+
+    // 模擬資料列表
     val taskList = remember {
         mutableStateListOf(
-            TaskItem("專案 A 報告", 0, "not yet"),
-            TaskItem("回覆緊急郵件", 1, "in progress"),
-            TaskItem("整理辦公桌", 2, "done"),
-            TaskItem("接聽推銷電話", 3, "in progress"),
-            TaskItem("未分類雜事", 4, "not yet")
+            TaskItem("專案 A 報告", 0, 0),
+            TaskItem("回覆緊急郵件", 1, 1),
+            TaskItem("整理辦公桌", 2, 2),
+            TaskItem("接聽推銷電話", 3, 1),
+            TaskItem("未分類雜事", 4, 0)
         )
     }
 
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { /* TODO: 新增邏輯 */ },
+                onClick = {
+                    currentEditingTask = null
+                    showEditScreen = true
+                },
                 containerColor = MaterialTheme.colorScheme.primary,
                 shape = CircleShape
             ) {
@@ -74,9 +101,10 @@ fun TasksScreen() {
 
                 if (viewMode == "list") {
                     Row(modifier = Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("in progress", "not yet", "done").forEach { label ->
-                            TaskFilterChip(label = label, isSelected = selectedProgress.contains(label)) {
-                                selectedProgress = if (selectedProgress.contains(label)) selectedProgress - label else selectedProgress + label
+                        val progressOptions = listOf("not yet" to 0, "in progress" to 1, "done" to 2)
+                        progressOptions.forEach { (label, value) ->
+                            TaskFilterChip(label = label, isSelected = selectedProgress.contains(value)) {
+                                selectedProgress = if (selectedProgress.contains(value)) selectedProgress - value else selectedProgress + value
                             }
                         }
                     }
@@ -90,7 +118,7 @@ fun TasksScreen() {
             // 過濾邏輯
             val filteredTasks = taskList.filter { task ->
                 val qMatch = selectedQuadrants.contains(task.quadrantId)
-                val pMatch = if (viewMode == "list") selectedProgress.contains(task.status) else true
+                val pMatch = if (viewMode == "list") selectedProgress.contains(task.progress) else true
                 val sMatch = task.title.contains(searchQuery, ignoreCase = true)
                 qMatch && pMatch && sMatch
             }
@@ -102,23 +130,30 @@ fun TasksScreen() {
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filteredTasks) { task ->
-                        // 取得原始索引以利更新狀態
                         val index = taskList.indexOf(task)
+
+                        // 轉換日期顯示格式
+                        val displayDate = if (task.dueTime != null) {
+                            SimpleDateFormat("yyyy.MM.dd", Locale.getDefault()).format(Date(task.dueTime))
+                        } else "No date"
 
                         StandardTaskCard(
                             title = task.title,
-                            tags = listOf("Work", task.status),
-                            date = "2025.12.18",
-                            status = task.status, // 【關鍵修正】傳入狀態，控制勾選與刪除線
+                            tags = listOf("Work", task.statusString),
+                            date = displayDate,
+                            status = task.statusString,
                             onCheckedChange = { isChecked ->
-                                // 【關鍵修正】連動邏輯：勾選則 done，取消勾選則 in progress
                                 if (index != -1) {
-                                    val newStatus = if (isChecked) "done" else "in progress"
-                                    taskList[index] = taskList[index].copy(status = newStatus)
+                                    val newProgress = if (isChecked) 2 else 1
+                                    taskList[index] = taskList[index].copy(progress = newProgress)
                                 }
                             },
+                            onEditClick = {
+                                currentEditingTask = task
+                                showEditScreen = true
+                            },
                             modifier = Modifier.background(
-                                getQuadrantColor(task.quadrantId).copy(alpha = 0.25f),
+                                getQuadrantColor(task.quadrantId).copy(alpha = 0.5f),
                                 RoundedCornerShape(20.dp)
                             )
                         )
@@ -128,29 +163,57 @@ fun TasksScreen() {
                 EmptyStateView()
             }
         }
+
+        // --- 全螢幕編輯/新增彈窗 ---
+        if (showEditScreen) {
+            Dialog(
+                onDismissRequest = { showEditScreen = false },
+                properties = DialogProperties(usePlatformDefaultWidth = false) // 關鍵：全螢幕
+            ) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    TaskEditScreen(
+                        initialTitle = currentEditingTask?.title ?: "",
+                        initialProgress = currentEditingTask?.progress ?: 0,
+                        initialQuadrant = currentEditingTask?.quadrantId ?: 4,
+                        initialDetail = currentEditingTask?.detail ?: "",
+                        initialDueTime = currentEditingTask?.dueTime,
+                        onBack = { showEditScreen = false },
+                        onSave = { title, progress, quadrant, detail, dueTime ->
+                            // 模擬儲存邏輯
+                            val newTask = TaskItem(title, quadrant, progress, detail, dueTime)
+                            if (currentEditingTask != null) {
+                                val idx = taskList.indexOf(currentEditingTask)
+                                if (idx != -1) taskList[idx] = newTask
+                            } else {
+                                taskList.add(newTask)
+                            }
+                            showEditScreen = false
+                        }
+                    )
+                }
+            }
+        }
     }
 }
 
-// --- 以下輔助組件保持不變 ---
+// --- 以下輔助組件配合左1右4配置 ---
 
 @Composable
 fun QuadrantColorMatrix(selectedSet: Set<Int>, onToggle: (Int) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).height(90.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).height(110.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ColorQuadrantBtn("?", isSelected = selectedSet.contains(4), quadrantId = 4, Modifier.weight(1.5f).fillMaxHeight()) { onToggle(4) }
-        Box(modifier = Modifier.weight(8.5f), contentAlignment = Alignment.Center) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ColorQuadrantBtn("重要&不緊急", selectedSet.contains(0), 0, Modifier.weight(1f)) { onToggle(0) }
-                    ColorQuadrantBtn("重要&緊急", selectedSet.contains(1), 1, Modifier.weight(1f)) { onToggle(1) }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ColorQuadrantBtn("不重要&不緊急", selectedSet.contains(2), 2, Modifier.weight(1f)) { onToggle(2) }
-                    ColorQuadrantBtn("不重要&緊急", selectedSet.contains(3), 3, Modifier.weight(1f)) { onToggle(3) }
-                }
+        ColorQuadrantBtn("?", selectedSet.contains(4), 4, Modifier.weight(1.5f).fillMaxHeight()) { onToggle(4) }
+        Column(modifier = Modifier.weight(8.5f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ColorQuadrantBtn("重要&不緊急", selectedSet.contains(0), 0, Modifier.weight(1f)) { onToggle(0) }
+                ColorQuadrantBtn("重要&緊急", selectedSet.contains(1), 1, Modifier.weight(1f)) { onToggle(1) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                ColorQuadrantBtn("不重要&不緊急", selectedSet.contains(2), 2, Modifier.weight(1f)) { onToggle(2) }
+                ColorQuadrantBtn("不重要&緊急", selectedSet.contains(3), 3, Modifier.weight(1f)) { onToggle(3) }
             }
         }
     }
@@ -167,10 +230,10 @@ fun ColorQuadrantBtn(label: String, isSelected: Boolean, quadrantId: Int, modifi
         shape = RoundedCornerShape(12.dp),
         color = containerColor
     ) {
-        Box(modifier = Modifier.padding(vertical = 12.dp, horizontal = 4.dp), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.padding(4.dp), contentAlignment = Alignment.Center) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall.copy(lineHeight = 14.sp, fontSize = 11.sp),
+                style = MaterialTheme.typography.labelSmall.copy(lineHeight = 13.sp, fontSize = 11.sp),
                 textAlign = TextAlign.Center,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                 color = contentColor
@@ -226,16 +289,19 @@ fun getQuadrantColor(type: Int): Color {
         1 -> Color(0xFFE38684)
         2 -> Color(0xFF66A869)
         3 -> Color(0xFF925AA2)
-        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+        else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.8f)
     }
 }
 
-data class TaskItem(
-    val title: String,
-    val quadrantId: Int,
-    val status: String = "not yet"
-)
-
-@Preview(showBackground = true)
+// --- Previews ---
+@Preview(showSystemUi = true, name = "Task 列表首頁")
 @Composable
-fun TasksPreview() { AppTheme { TasksScreen() } }
+fun TasksScreenMainPreview() {
+    AppTheme { TasksScreen(initialShowEdit = false) }
+}
+
+@Preview(showSystemUi = true, name = "模擬點擊 FAB 或編輯後的跳轉視窗")
+@Composable
+fun TasksScreenPopUpPreview() {
+    AppTheme { TasksScreen(initialShowEdit = true) }
+}
