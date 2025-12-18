@@ -136,14 +136,12 @@ fun TasksScreen() {
 @Composable
 fun QuadrantColorMatrix(selectedSet: Set<Int>, onToggle: (Int) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).height(90.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.weight(1.2f), contentAlignment = Alignment.Center) {
-            ColorQuadrantBtn("?", isSelected = selectedSet.contains(4), quadrantId = 4) { onToggle(4) }
-        }
-        Box(modifier = Modifier.weight(8.8f), contentAlignment = Alignment.Center) {
+        ColorQuadrantBtn("?", isSelected = selectedSet.contains(4), quadrantId = 4, Modifier.weight(1.5f).fillMaxHeight()) { onToggle(4) }
+        Box(modifier = Modifier.weight(8.5f), contentAlignment = Alignment.Center) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ColorQuadrantBtn("重要&不緊急", selectedSet.contains(0), 0, Modifier.weight(1f)) { onToggle(0) }
