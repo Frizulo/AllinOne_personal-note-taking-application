@@ -1,27 +1,31 @@
 package com.example.allinone.ui.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Task
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.allinone.ui.theme.AppTheme
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    onGoTasks: () -> Unit
+) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -37,7 +41,7 @@ fun HomeScreen() {
             // 模擬 BottomNav，與草圖保持一致
             NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 NavigationBarItem(selected = true, onClick = {}, icon = { Icon(Icons.Default.Home, "Home") }, label = { Text("Home") })
-                NavigationBarItem(selected = false, onClick = {}, icon = { Icon(Icons.Default.Task, "Tasks") }, label = { Text("Tasks") })
+                NavigationBarItem(selected = false, onClick = onGoTasks, icon = { Icon(Icons.Default.Task, "Tasks") }, label = { Text("Tasks") })
                 NavigationBarItem(selected = false, onClick = {}, icon = { Icon(Icons.Default.CalendarMonth, "Schedule") }, label = { Text("Schedule") })
                 NavigationBarItem(selected = false, onClick = {}, icon = { Icon(Icons.Default.Bookmark, "Saved") }, label = { Text("Saved") })
             }
@@ -163,10 +167,10 @@ fun ParaCard(data: ParaData) {
     }
 }
 
-@Preview(showBackground = true, name = "Home")
-@Composable
-fun HomePreview() {
-    AppTheme {
-        HomeScreen()
-    }
-}
+//@Preview(showBackground = true, name = "Home")
+//@Composable
+//fun HomePreview() {
+//    AppTheme {
+//        HomeScreen()
+//    }
+//}

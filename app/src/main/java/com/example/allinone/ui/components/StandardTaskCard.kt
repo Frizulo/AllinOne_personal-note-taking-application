@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -30,6 +31,7 @@ fun StandardTaskCard(
     status: String = "not yet",
     description: String = "這是一段預設的任務詳細敘述，點擊卡片可展開查看動畫效果。",
     onEditClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {},
     onCheckedChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -97,6 +99,10 @@ fun StandardTaskCard(
                     TextButton(onClick = onEditClick) {
                         Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
                         Text("編輯")
+                    }
+                    TextButton(onClick = onDeleteClick) {
+                        Icon(Icons.Default.Delete, null, modifier = Modifier.size(16.dp))
+                        Text("刪除")
                     }
                 }
             }
