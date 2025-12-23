@@ -1,23 +1,15 @@
 package com.example.allinone.ui.tasks
 
-import android.annotation.SuppressLint
+
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.allinone.data.local.entities.TaskEntity
 import com.example.allinone.data.repo.TasksRepository
-import com.example.allinone.worker.SyncScheduler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-data class TasksUiState(
-    val tasks: List<TaskEntity> = emptyList(),
-    val isSyncing: Boolean = false,
-    val error: String? = null
-)
 
 class TasksViewModel(private val repo: TasksRepository) : ViewModel() {
 

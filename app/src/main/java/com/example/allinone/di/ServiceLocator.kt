@@ -1,7 +1,6 @@
 package com.example.allinone.di
 
 import android.content.Context
-import androidx.room.Room
 import com.example.allinone.data.local.AppDatabase
 import com.example.allinone.data.remote.ApiProvider
 import com.example.allinone.data.repo.AuthRepository
