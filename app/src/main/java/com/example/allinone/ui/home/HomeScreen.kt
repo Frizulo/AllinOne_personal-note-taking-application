@@ -24,7 +24,7 @@ import com.example.allinone.ui.theme.AppTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onGoTasks: () -> Unit
+    username: String?
 ) {
     Scaffold(
         topBar = {
@@ -36,15 +36,6 @@ fun HomeScreen(
                     )
                 }
             )
-        },
-        bottomBar = {
-            // 模擬 BottomNav，與草圖保持一致
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                NavigationBarItem(selected = true, onClick = {}, icon = { Icon(Icons.Default.Home, "Home") }, label = { Text("Home") })
-                NavigationBarItem(selected = false, onClick = onGoTasks, icon = { Icon(Icons.Default.Task, "Tasks") }, label = { Text("Tasks") })
-                NavigationBarItem(selected = false, onClick = {}, icon = { Icon(Icons.Default.CalendarMonth, "Schedule") }, label = { Text("Schedule") })
-                NavigationBarItem(selected = false, onClick = {}, icon = { Icon(Icons.Default.Bookmark, "Saved") }, label = { Text("Saved") })
-            }
         }
     ) { innerPadding ->
         Column(
@@ -55,7 +46,7 @@ fun HomeScreen(
         ) {
             // 1. 問候語
             Text(
-                text = "Hi, <username>",
+                text = "Hi, ${username ?: "User"}",
                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                 modifier = Modifier.padding(vertical = 8.dp)
             )

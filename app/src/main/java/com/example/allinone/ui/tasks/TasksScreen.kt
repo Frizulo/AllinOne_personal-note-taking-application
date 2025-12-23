@@ -11,8 +11,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Task
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.setValue
@@ -30,22 +34,6 @@ import com.example.allinone.ui.components.StandardTaskCard
 import com.example.allinone.ui.components.TaskFilterChip
 import java.text.SimpleDateFormat
 import java.util.*
-
-// 暫時定義，以便 UI 正常運作，組員開發後可移除
-data class TaskItem(
-    val title: String,
-    val quadrantId: Int,
-    val progress: Int = 0, // 0: not yet, 1: in progress, 2: done
-    val detail: String = "",
-    val dueTime: Long? = null
-) {
-    val statusString: String
-        get() = when (progress) {
-            1 -> "in progress"
-            2 -> "done"
-            else -> "not yet"
-        }
-}
 
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,12 +71,16 @@ fun TasksScreen(
             }
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+        Column(modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()) {
 
             // 頂部控制區
             Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -109,7 +101,9 @@ fun TasksScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it; viewModel.setQuery(searchQuery) },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
                     placeholder = { Text("Search your plan...") },
                     trailingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     shape = CircleShape
@@ -218,11 +212,16 @@ fun TasksScreen(
 @Composable
 fun QuadrantColorMatrix(selectedSet: Set<Int>, onToggle: (Int) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp).height(60.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 12.dp)
+            .height(60.dp),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        ColorQuadrantBtn("?", selectedSet.contains(4), 4, Modifier.weight(1.5f).fillMaxHeight()) { onToggle(4) }
+        ColorQuadrantBtn("?", selectedSet.contains(4), 4, Modifier
+            .weight(1.5f)
+            .fillMaxHeight()) { onToggle(4) }
         Column(modifier = Modifier.weight(8.5f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 ColorQuadrantBtn("重要&不緊急", selectedSet.contains(0), 0, Modifier.weight(1f)) { onToggle(0) }

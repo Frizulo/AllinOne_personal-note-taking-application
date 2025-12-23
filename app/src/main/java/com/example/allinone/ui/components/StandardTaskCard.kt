@@ -73,7 +73,9 @@ fun StandardTaskCard(
                         color = if (isDone) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = tags.joinToString(" #", prefix = "#"),
+                        text = tags
+                            .filter { it.isNotBlank() }
+                            .joinToString(" #", prefix = "#"),
                         style = MaterialTheme.typography.labelSmall,
                         color = if (isDone) Color.Gray else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
                     )
@@ -121,7 +123,7 @@ fun InteractiveTaskCardPreview() {
         Box(modifier = Modifier.padding(16.dp)) {
             StandardTaskCard(
                 title = "點擊左側勾選框試試看",
-                tags = listOf("測試", testStatus),
+                tags = listOf("", testStatus),
                 date = "2025.12.18",
                 status = testStatus,
                 onCheckedChange = { isChecked ->

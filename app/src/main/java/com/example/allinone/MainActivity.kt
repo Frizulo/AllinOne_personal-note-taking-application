@@ -1,14 +1,24 @@
 package com.example.allinone
 
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.annotation.RequiresApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -19,6 +29,7 @@ import com.example.allinone.data.remote.ApiProvider
 import com.example.allinone.data.remote.dto.AuthRequest
 import com.example.allinone.di.ServiceLocator
 import com.example.allinone.ui.auth.*
+import com.example.allinone.ui.components.AllInOneBottomBar
 import com.example.allinone.ui.home.HomeScreen
 import com.example.allinone.ui.tasks.TasksScreen
 import com.example.allinone.ui.tasks.TasksViewModel
@@ -27,6 +38,7 @@ import com.example.allinone.worker.SyncWorker
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -40,6 +52,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 private fun AppRoot() {
     val context = LocalContext.current
@@ -48,47 +61,96 @@ private fun AppRoot() {
     val authVm = remember { AuthViewModel(ServiceLocator.authRepository(context)) }
     val tasksVm = remember { TasksViewModel(ServiceLocator.tasksRepository(context)) }
 
-    NavHost(navController = nav, startDestination = "landing") {
+    val backStackEntry by nav.currentBackStackEntryAsState()
+    val route = backStackEntry?.destination?.route
 
-        composable("landing") {
-            LandingScreen(
-                onLogin = { nav.navigate("login") },
-                onSignUp = { nav.navigate("signup") }
-            )
+    // 這些頁面才需要顯示 BottomBar
+    val showBottomBar = route in setOf(
+        Screen.Home.route,
+        Screen.Tasks.route,
+        Screen.Schedule.route,
+        Screen.Saved.route
+    )
+
+    Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing
+            .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
+        bottomBar = {
+            if (showBottomBar) {
+                AllInOneBottomBar(
+                    currentRoute = route,
+                    onNavigate = { destRoute ->
+                        nav.navigate(destRoute) {
+                            // 避免一直疊同一個目的地
+                            launchSingleTop = true
+                            restoreState = true
+                            // 回到 graph 起點（通常是 landing），但我們只想管理底部頁面的堆疊
+                            popUpTo(nav.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                        }
+                    }
+                )
+            }
         }
+    ) { innerPadding ->
+        NavHost(
+            navController = nav,
+            startDestination = "landing",
+            modifier = Modifier.padding(innerPadding)
+        ) {
 
-        composable("login") {
-            LoginScreen(
-                viewModel = authVm,
-                onSuccess = {
-                    enqueueSync(context)
-                    nav.navigate(Screen.Home.route) { popUpTo("landing") { inclusive = true } }
-                },
-                onGoSignUp = { nav.navigate("signup") }
-            )
+            composable("landing") {
+                LandingScreen(
+                    onLogin = { nav.navigate("login") },
+                    onSignUp = { nav.navigate("signup") }
+                )
+            }
+
+            composable("login") {
+                LoginScreen(
+                    viewModel = authVm,
+                    onSuccess = {
+                        enqueueSync(context)
+                        nav.navigate(Screen.Home.route) {
+                            popUpTo("landing") { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                    onGoSignUp = { nav.navigate("signup") }
+                )
+            }
+
+            composable("signup") {
+                SignUpScreen(
+                    viewModel = authVm,
+                    onSuccess = { nav.navigate("login") },
+                    onGoLogin = { nav.navigate("login") }
+                )
+            }
+
+            composable(Screen.Home.route) {
+                val username by authVm.username.collectAsState()
+                HomeScreen(username = username)
+            }
+
+            composable(Screen.Tasks.route) {
+                TasksScreen(viewModel = tasksVm)
+            }
+
+            // 先留空頁面，避免路由錯誤
+            composable(Screen.Schedule.route) {
+                val username by authVm.username.collectAsState()
+                HomeScreen(username = username)
+            }
+            composable(Screen.Saved.route) {
+                val username by authVm.username.collectAsState()
+                HomeScreen(username = username)
+            }
         }
-
-        composable("signup") {
-            SignUpScreen(
-                viewModel = authVm,
-                onSuccess = { nav.navigate("login") },
-                onGoLogin = { nav.navigate("login") }
-            )
-        }
-
-        composable(Screen.Home.route) {
-            HomeScreen(onGoTasks = { nav.navigate(Screen.Tasks.route) })
-        }
-
-        composable(Screen.Tasks.route) {
-            TasksScreen(viewModel = tasksVm)
-        }
-
-        // 先留空頁面，避免路由錯誤
-        composable(Screen.Schedule.route) { HomeScreen(onGoTasks = { nav.navigate(Screen.Tasks.route) }) }
-        composable(Screen.Saved.route) { HomeScreen(onGoTasks = { nav.navigate(Screen.Tasks.route) }) }
     }
 }
+
 
 private fun enqueueSync(context: android.content.Context) {
     val constraints = Constraints.Builder()
