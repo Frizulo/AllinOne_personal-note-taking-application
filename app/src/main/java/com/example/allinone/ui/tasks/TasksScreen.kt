@@ -1,5 +1,7 @@
 package com.example.allinone.ui.tasks
 
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -48,12 +50,12 @@ data class TaskItem(
         }
 }
 
+@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TasksScreen(
     viewModel: TasksViewModel
 ) {
-    var viewMode by remember { mutableStateOf("list") }
     var selectedQuadrants by remember { mutableStateOf(setOf(0, 1, 2, 3, 4)) }
     var selectedProgress by remember { mutableStateOf(setOf(0, 1, 2)) } // 改用數值對應資料表
     var searchQuery by remember { mutableStateOf("") }
@@ -121,8 +123,8 @@ fun TasksScreen(
                 }
             }
 
-            fun quadrantMatches(q: Int) = selectedQuadrants.isEmpty() || q in selectedQuadrants
-            fun progressMatches(p: Int) = selectedProgress.isEmpty() || p in selectedProgress
+            fun quadrantMatches(q: Int) =  q in selectedQuadrants
+            fun progressMatches(p: Int) =  p in selectedProgress
             // 過濾邏輯
             val filteredTasks = uiState.filter { task ->
                 quadrantMatches(task.quadrant) && progressMatches(task.progress)
@@ -294,17 +296,3 @@ fun getQuadrantColor(type: Int): Color {
         else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.8f)
     }
 }
-
-
-//// --- Previews ---
-//@Preview(showSystemUi = true, name = "Task 列表首頁")
-//@Composable
-//fun TasksScreenMainPreview() {
-//    AppTheme { TasksScreen(initialShowEdit = false) }
-//}
-//
-//@Preview(showSystemUi = true, name = "模擬點擊 FAB 或編輯後的跳轉視窗")
-//@Composable
-//fun TasksScreenPopUpPreview() {
-//    AppTheme { TasksScreen(initialShowEdit = true) }
-//}

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.allinone.ui.theme.AppTheme
@@ -18,11 +19,14 @@ fun LoginScreen(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val uiState by viewModel.uiState.collectAsState()
+    val appContext = LocalContext.current.applicationContext
+
+
 
     AuthFrame(
         title = "Login",
         buttonText = if (uiState.isLoading) "Logging in..." else "Login",
-        onButtonClick = { viewModel.login(username, password, onSuccess) }
+        onButtonClick = { viewModel.login(username, password, appContext, onSuccess) }
     ) {
         AuthTextField(label = "Username", value = username, onValueChange = { username = it })
         Spacer(modifier = Modifier.height(16.dp))
