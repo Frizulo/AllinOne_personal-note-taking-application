@@ -1,9 +1,7 @@
 package com.example.allinone
 
-import android.content.Context
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,7 +15,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.lifecycleScope
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import androidx.work.Constraints
@@ -25,17 +23,15 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
-import com.example.allinone.data.remote.ApiProvider
-import com.example.allinone.data.remote.dto.AuthRequest
 import com.example.allinone.di.ServiceLocator
 import com.example.allinone.ui.auth.*
 import com.example.allinone.ui.components.AllInOneBottomBar
 import com.example.allinone.ui.home.HomeScreen
+import com.example.allinone.ui.home.HomeViewModel
 import com.example.allinone.ui.tasks.TasksScreen
 import com.example.allinone.ui.tasks.TasksViewModel
 import com.example.allinone.ui.theme.AppTheme
 import com.example.allinone.worker.SyncWorker
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -60,6 +56,7 @@ private fun AppRoot() {
 
     val authVm = remember { AuthViewModel(ServiceLocator.authRepository(context)) }
     val tasksVm = remember { TasksViewModel(ServiceLocator.tasksRepository(context)) }
+    val homeVm = remember { HomeViewModel(ServiceLocator.tasksRepository(context)) }
 
     val backStackEntry by nav.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
@@ -131,7 +128,7 @@ private fun AppRoot() {
 
             composable(Screen.Home.route) {
                 val username by authVm.username.collectAsState()
-                HomeScreen(username = username)
+                HomeScreen(username = username, homeVm)
             }
 
             composable(Screen.Tasks.route) {
@@ -141,11 +138,11 @@ private fun AppRoot() {
             // 先留空頁面，避免路由錯誤
             composable(Screen.Schedule.route) {
                 val username by authVm.username.collectAsState()
-                HomeScreen(username = username)
+                HomeScreen(username = username, homeVm)
             }
             composable(Screen.Saved.route) {
                 val username by authVm.username.collectAsState()
-                HomeScreen(username = username)
+                HomeScreen(username = username, homeVm)
             }
         }
     }

@@ -1,0 +1,41 @@
+package com.example.allinone.di
+
+import android.content.Context
+import androidx.room.Room
+import com.example.allinone.data.local.AppDatabase
+import com.example.allinone.data.remote.ApiProvider
+import com.example.allinone.data.repo.AuthRepository
+import com.example.allinone.data.repo.TasksRepository
+import com.example.allinone.data.store.TokenStore
+
+object ServiceLocator {
+
+    @Volatile private var tokenStore: TokenStore? = null
+    @Volatile private var tasksRepo: TasksRepository? = null
+    @Volatile private var authRepo: AuthRepository? = null
+
+    fun tokenStore(context: Context): TokenStore =
+        tokenStore ?: synchronized(this) {
+            tokenStore ?: TokenStore(context.applicationContext).also { tokenStore = it }
+        }
+
+    fun database(context: Context): AppDatabase =
+        AppDatabase.getInstance(context)
+
+    fun tasksRepository(context: Context): TasksRepository =
+        tasksRepo ?: synchronized(this) {
+            val ts = tokenStore(context)
+            val api = ApiProvider.create(context.applicationContext, ts)
+            val dao = database(context).taskDao()
+            TasksRepository(dao = dao, api = api, tokenStore = ts)
+                .also { tasksRepo = it }
+        }
+
+    fun authRepository(context: Context): AuthRepository =
+        authRepo ?: synchronized(this) {
+            val ts = tokenStore(context)
+            val api = ApiProvider.create(context.applicationContext, ts)
+            AuthRepository(api = api, tokenStore = ts)
+                .also { authRepo = it }
+        }
+}

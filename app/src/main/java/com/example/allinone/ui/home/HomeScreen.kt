@@ -2,7 +2,6 @@ package com.example.allinone.ui.home
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Task
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -14,6 +13,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.*
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -24,7 +25,8 @@ import com.example.allinone.ui.theme.AppTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    username: String?
+    username: String?,
+    viewModel: HomeViewModel
 ) {
     Scaffold(
         topBar = {
@@ -92,15 +94,18 @@ fun HomeScreen(
                     modifier = Modifier.padding(20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val today by viewModel.todayTodoCount.collectAsState()
+                    val todaytotal by viewModel.todayTodoTotalCount.collectAsState()
+                    val progress = if (todaytotal <= 0) 0f else (todaytotal - today).toFloat()/todaytotal.toFloat()
 
                     // 後端須更新數字
                     Column(modifier = Modifier.weight(1f)) {
                         Text("今日待辦進度", style = MaterialTheme.typography.titleSmall)
-                        Text("還有 5 個任務待處理", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("還有 $today 個任務待處理", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     // 視覺化進度
                     CircularProgressIndicator(
-                        progress = { 0.6f },
+                        progress = { progress },
                         modifier = Modifier.size(48.dp),
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         strokeWidth = 6.dp,
@@ -113,9 +118,10 @@ fun HomeScreen(
             // 4. PARA 模組入口 (優化：加入 Icon 與計數，更具利用性)
             Text("知識管理 (PARA)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
 
+            val active by viewModel.activeTaskCount.collectAsState()
             // 後端須更新數字
             val paraList = listOf(
-                ParaData("Projects", "12", Icons.Default.RocketLaunch, MaterialTheme.colorScheme.tertiaryContainer),
+                ParaData("Projects", count = active.toString(), Icons.Default.RocketLaunch, MaterialTheme.colorScheme.tertiaryContainer),
                 ParaData("Areas", "8", Icons.Default.Favorite, MaterialTheme.colorScheme.surfaceVariant),
                 ParaData("Resources", "45", Icons.Default.Source, MaterialTheme.colorScheme.surfaceVariant),
                 ParaData("Archive", "120", Icons.Default.Archive, MaterialTheme.colorScheme.surfaceVariant)
@@ -157,11 +163,3 @@ fun ParaCard(data: ParaData) {
         }
     }
 }
-
-//@Preview(showBackground = true, name = "Home")
-//@Composable
-//fun HomePreview() {
-//    AppTheme {
-//        HomeScreen()
-//    }
-//}
