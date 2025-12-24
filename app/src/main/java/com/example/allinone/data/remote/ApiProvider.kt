@@ -1,6 +1,8 @@
 package com.example.allinone.data.remote
 
 import android.content.Context
+import com.example.allinone.data.remote.weather.GeoApi
+import com.example.allinone.data.remote.weather.WeatherApi
 import com.example.allinone.data.store.TokenStore
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -13,14 +15,16 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 object ApiProvider {
 
     /**
-     * 重要：請把 BASE_URL 改成你的後端 URL
-     *  - Android Emulator 連本機： http://10.0.2.2:PORT/api/
-     *  - 實機請用同網段 IP： http://192.168.x.x:PORT/api/
+     *  - BASE_URL： http://210.240.160.82:9090/api/
      */
     const val BASE_URL = "http://210.240.160.82:9090/api/"
-    val logging = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+
+    private val moshi: Moshi by lazy {
+        Moshi.Builder()
+            .add(KotlinJsonAdapterFactory())
+            .build()
     }
+
 
     fun create(context: Context, tokenStore: TokenStore): AllInOneApi {
         val authInterceptor = Interceptor { chain ->
@@ -35,17 +39,16 @@ object ApiProvider {
 
 
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = HttpLoggingInterceptor.Level.BODY
         }
-
         val client = OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
             .addInterceptor(logging)
             .build()
-
-        val moshi = Moshi.Builder()
-            .add(KotlinJsonAdapterFactory())
-            .build()
+//
+//        val moshi = Moshi.Builder()
+//            .add(KotlinJsonAdapterFactory())
+//            .build()
 
         return Retrofit.Builder()
             .baseUrl(BASE_URL)
@@ -54,5 +57,40 @@ object ApiProvider {
             .build()
             .create(AllInOneApi::class.java)
     }
+
+    fun createGeoApi(context: Context): GeoApi {
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
+
+        val client = OkHttpClient.Builder()
+            .addInterceptor(logging)
+            .build()
+
+        return Retrofit.Builder()
+            .baseUrl("https://geocoding-api.open-meteo.com/")
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(GeoApi::class.java)
+    }
+
+    fun createWeatherApi(context: Context): WeatherApi {
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
+
+        val client = OkHttpClient.Builder()
+            .addInterceptor(logging)
+            .build()
+
+        return Retrofit.Builder()
+            .baseUrl("https://api.open-meteo.com/")
+            .client(client)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+            .create(WeatherApi::class.java)
+    }
+
 
 }

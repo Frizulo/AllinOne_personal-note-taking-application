@@ -5,6 +5,7 @@ import com.example.allinone.data.local.AppDatabase
 import com.example.allinone.data.remote.ApiProvider
 import com.example.allinone.data.repo.AuthRepository
 import com.example.allinone.data.repo.TasksRepository
+import com.example.allinone.data.repo.WeatherRepository
 import com.example.allinone.data.store.TokenStore
 
 object ServiceLocator {
@@ -37,4 +38,11 @@ object ServiceLocator {
             AuthRepository(api = api, tokenStore = ts)
                 .also { authRepo = it }
         }
+
+    fun weatherRepository(context: Context): WeatherRepository {
+        val geoApi = ApiProvider.createGeoApi(context)
+        val weatherApi = ApiProvider.createWeatherApi(context)
+        return WeatherRepository(geoApi, weatherApi)
+    }
+
 }

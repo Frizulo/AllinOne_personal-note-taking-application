@@ -65,11 +65,17 @@ fun HomeScreen(
                     .padding(24.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-
+                    val weather by viewModel.todayWeather.collectAsState()
                     // 後端須更新文字 數字 透過 API
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("今天... 局部有雨", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelLarge)
-                        Text("25°C", color = Color.White, style = MaterialTheme.typography.displayMedium)
+                        if (weather == null) {
+                            Text("今天天氣", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelLarge)
+                            Text("載入中…")
+                        } else {
+                            Text("${weather!!.city}今天天氣：", color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelLarge)
+                            Text("${weather!!.description} ${weather!!.tempC}°C", color = Color.White, style = MaterialTheme.typography.displayMedium)
+                        }
+                        //Text("25°C", color = Color.White, style = MaterialTheme.typography.displayMedium)
                     }
                     Icon(
                         imageVector = Icons.Default.CloudQueue,

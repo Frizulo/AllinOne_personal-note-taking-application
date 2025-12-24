@@ -48,14 +48,16 @@ fun StandardTaskCard(
             ),
         colors = CardDefaults.cardColors(
             containerColor = if (isDone)
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
             else
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
         ),
         shape = RoundedCornerShape(20.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
+            // --- 未展開時的主視圖 ---
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // 1. 勾選按鈕 (商業核心：快速完成)
                 Checkbox(
                     checked = isDone,
                     onCheckedChange = { onCheckedChange(it) } // 點擊時通知外部
@@ -95,7 +97,12 @@ fun StandardTaskCard(
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(description, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    lineHeight = 18.sp
+                )
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onEditClick) {
