@@ -179,4 +179,22 @@ class TasksRepository(
         val end = start + 24L * 60 * 60 * 1000 - 1
         return start to end
     }
+
+    fun observeTasksForDay(dayMillis: Long): Flow<List<TaskEntity>> {
+        val (start, end) = dayRangeMillis(dayMillis)
+        return dao.observeTasksByDueDay(start, end)
+    }
+
+    private fun dayRangeMillis(anyMillis: Long): Pair<Long, Long> {
+        val cal = java.util.Calendar.getInstance()
+        cal.timeInMillis = anyMillis
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        val start = cal.timeInMillis
+        val end = start + 24L * 60 * 60 * 1000 - 1
+        return start to end
+    }
+
 }

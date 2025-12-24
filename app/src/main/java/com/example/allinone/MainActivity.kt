@@ -15,6 +15,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import androidx.work.Constraints
@@ -27,6 +28,8 @@ import com.example.allinone.ui.auth.*
 import com.example.allinone.ui.components.AllInOneBottomBar
 import com.example.allinone.ui.home.HomeScreen
 import com.example.allinone.ui.home.HomeViewModel
+import com.example.allinone.ui.schedule.ScheduleScreen
+import com.example.allinone.ui.schedule.ScheduleViewModel
 import com.example.allinone.ui.tasks.TasksScreen
 import com.example.allinone.ui.tasks.TasksViewModel
 import com.example.allinone.ui.theme.AppTheme
@@ -56,6 +59,7 @@ private fun AppRoot() {
     val authVm = remember { AuthViewModel(ServiceLocator.authRepository(context)) }
     val tasksVm = remember { TasksViewModel(ServiceLocator.tasksRepository(context)) }
     val homeVm = remember { HomeViewModel(ServiceLocator.tasksRepository(context),ServiceLocator.weatherRepository(context)) }
+    val scheduleVm = remember { ScheduleViewModel(ServiceLocator.tasksRepository(context)) }
 
     val backStackEntry by nav.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
@@ -136,8 +140,7 @@ private fun AppRoot() {
 
             // 先留空頁面，避免路由錯誤
             composable(Screen.Schedule.route) {
-                val username by authVm.username.collectAsState()
-                HomeScreen(username = username, homeVm)
+                ScheduleScreen(scheduleVm)
             }
             composable(Screen.Saved.route) {
                 val username by authVm.username.collectAsState()

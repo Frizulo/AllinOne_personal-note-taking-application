@@ -27,6 +27,15 @@ interface TaskDao {
     fun observeSearch(uid: Long, q: String): Flow<List<TaskEntity>>
 
     @Query("""
+    SELECT * FROM tasks
+    WHERE deletedTimeMillis IS NULL
+      AND dueTimeMillis IS NOT NULL
+      AND dueTimeMillis BETWEEN :startMillis AND :endMillis
+    ORDER BY dueTimeMillis ASC, localUpdatedMillis DESC
+""")
+    fun observeTasksByDueDay(startMillis: Long, endMillis: Long): Flow<List<TaskEntity>>
+
+    @Query("""
         SELECT COUNT(*) FROM tasks
         WHERE deletedTimeMillis IS NULL AND userUid = :uid
           AND progress != 2
