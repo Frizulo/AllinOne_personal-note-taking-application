@@ -12,19 +12,27 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.Scaffold
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.*
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.allinone.di.ServiceLocator
-import com.example.allinone.ui.auth.*
+import com.example.allinone.ui.auth.AuthViewModel
+import com.example.allinone.ui.auth.LandingScreen
+import com.example.allinone.ui.auth.LoginScreen
+import com.example.allinone.ui.auth.SignUpScreen
 import com.example.allinone.ui.components.AllInOneBottomBar
 import com.example.allinone.ui.home.HomeScreen
 import com.example.allinone.ui.home.HomeViewModel
@@ -59,7 +67,13 @@ private fun AppRoot() {
     val authVm = remember { AuthViewModel(ServiceLocator.authRepository(context)) }
     val tasksVm = remember { TasksViewModel(ServiceLocator.tasksRepository(context)) }
     val homeVm = remember { HomeViewModel(ServiceLocator.tasksRepository(context),ServiceLocator.weatherRepository(context)) }
-    val scheduleVm = remember { ScheduleViewModel(ServiceLocator.tasksRepository(context)) }
+    val scheduleVm = remember {
+        ScheduleViewModel(
+            tasksRepo = ServiceLocator.tasksRepository(context),
+            scheduleRepo = ServiceLocator.scheduleRepository(context),
+            tokenStore = ServiceLocator.tokenStore(context)
+        )
+    }
 
     val backStackEntry by nav.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
