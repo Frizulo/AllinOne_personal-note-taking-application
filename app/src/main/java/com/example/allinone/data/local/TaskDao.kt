@@ -28,12 +28,14 @@ interface TaskDao {
 
     @Query("""
     SELECT * FROM tasks
-    WHERE deletedTimeMillis IS NULL
+    WHERE userUid = :uid
+      AND deletedTimeMillis IS NULL
       AND dueTimeMillis IS NOT NULL
-      AND dueTimeMillis BETWEEN :startMillis AND :endMillis
-    ORDER BY dueTimeMillis ASC, localUpdatedMillis DESC
+      AND dueTimeMillis BETWEEN :start AND :end
+    ORDER BY dueTimeMillis ASC, updatedTimeMillis DESC
 """)
-    fun observeTasksByDueDay(startMillis: Long, endMillis: Long): Flow<List<TaskEntity>>
+    fun observeTasksByDueDay(uid: Long, start: Long, end: Long): kotlinx.coroutines.flow.Flow<List<com.example.allinone.data.local.entities.TaskEntity>>
+
 
     @Query("""
         SELECT COUNT(*) FROM tasks

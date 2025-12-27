@@ -181,9 +181,13 @@ class TasksRepository(
     }
 
     fun observeTasksForDay(dayMillis: Long): Flow<List<TaskEntity>> {
+        val uid = tokenStore.peekUserUid()
+            ?: return kotlinx.coroutines.flow.flowOf(emptyList())
+
         val (start, end) = dayRangeMillis(dayMillis)
-        return dao.observeTasksByDueDay(start, end)
+        return dao.observeTasksByDueDay(uid, start, end)
     }
+
 
     private fun dayRangeMillis(anyMillis: Long): Pair<Long, Long> {
         val cal = java.util.Calendar.getInstance()

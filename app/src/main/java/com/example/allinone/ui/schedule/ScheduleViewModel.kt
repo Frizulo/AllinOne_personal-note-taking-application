@@ -10,48 +10,36 @@ import com.example.allinone.data.repo.ScheduleRepository
 import com.example.allinone.data.repo.ScheduleStats3x3
 import com.example.allinone.data.repo.TasksRepository
 import com.example.allinone.data.store.TokenStore
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ScheduleViewModel(
     private val tasksRepo: TasksRepository,
     private val scheduleRepo: ScheduleRepository,
-    private val tokenStore: TokenStore
+    tokenStore: TokenStore
 ) : ViewModel() {
 
     // -------------------------
-    // 原本功能：月曆 + 當日任務
+    // Calendar state
     // -------------------------
 
-    // 用當天做預設選擇（⚠️ 建議改成當日 00:00，否則 observeTasksForDay 可能要 normalize）
-    private val _selectedDayMillis = MutableStateFlow(System.currentTimeMillis())
-    val selectedDayMillis: StateFlow<Long> = _selectedDayMillis
+    // ✅ 一開始就用「今天 00:00」避免狀態亂跳
+    private val _selectedDayMillis = MutableStateFlow(startOfDay(System.currentTimeMillis()))
+    val selectedDayMillis: StateFlow<Long> = _selectedDayMillis.asStateFlow()
 
-    // 月份狀態（用年月來表示）
-    private val _monthAnchorMillis = MutableStateFlow(System.currentTimeMillis())
-    val monthAnchorMillis: StateFlow<Long> = _monthAnchorMillis
-
-    val tasksOfSelectedDay: StateFlow<List<TaskEntity>> =
-        _selectedDayMillis
-            .flatMapLatest { day -> tasksRepo.observeTasksForDay(day) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    private val _monthAnchorMillis = MutableStateFlow(startOfMonth(System.currentTimeMillis()))
+    val monthAnchorMillis: StateFlow<Long> = _monthAnchorMillis.asStateFlow()
 
     fun selectDay(millis: Long) {
-        _selectedDayMillis.value = millis
+        _selectedDayMillis.value = startOfDay(millis)
+    }
+
+    fun setMonthAnchor(millis: Long) {
+        _monthAnchorMillis.value = startOfMonth(millis)
     }
 
     fun gotoPrevMonth() {
@@ -71,7 +59,33 @@ class ScheduleViewModel(
     }
 
     // -------------------------
-    // 新增功能：Timeline / Slot
+    // uid state（避免每次 first()）
+    // -------------------------
+
+    // ✅ uid 變成 StateFlow，隨時可取，不要 first()
+    private val uidState: StateFlow<Long?> =
+        tokenStore.uidFlow
+            .distinctUntilChanged()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    private fun requireUidOrNull(): Long? = uidState.value
+
+    // -------------------------
+    // Tasks of day
+    // -------------------------
+
+    val tasksOfSelectedDay: StateFlow<List<TaskEntity>> =
+        combine(uidState, _selectedDayMillis) { uid, day0 ->
+            uid to day0
+        }
+            .flatMapLatest { (uid, day0) ->
+                if (uid == null) flowOf(emptyList())
+                else tasksRepo.observeTasksForDay(day0) // repo 內部已 peekUid/或 DAO 帶 uid（你目前版本OK）
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    // -------------------------
+    // Mode
     // -------------------------
 
     enum class Mode { Tasks, Timeline }
@@ -79,31 +93,41 @@ class ScheduleViewModel(
     val mode: StateFlow<Mode> = _mode.asStateFlow()
     fun setMode(m: Mode) { _mode.value = m }
 
-    // uid（多帳號隔離用）
-    private val uidFlow: Flow<Long> =
-        tokenStore.uidFlow   // 如果這裡編譯錯，把 TokenStore 相關那段貼我，我幫你改成正確名稱
-            .filterNotNull()
-            .distinctUntilChanged()
+    // -------------------------
+    // Slots + Stats
+    // -------------------------
 
-    // 當天 slots（Timeline View 使用）
     val slotsWithTask: StateFlow<List<ScheduleSlotWithTask>> =
-        combine(uidFlow, _selectedDayMillis) { uid, day ->
-            uid to normalizeToStartOfDay(day) // 用當日 00:00 查 slot
+        combine(uidState, _selectedDayMillis) { uid, day0 ->
+            uid to day0 // day0 已是 00:00
         }
-            .flatMapLatest { (uid, date0) -> scheduleRepo.observeSlotsWithTask(uid, date0) }
+            .flatMapLatest { (uid, date0) ->
+                if (uid == null) flowOf(emptyList())
+                else scheduleRepo.observeSlotsWithTask(uid, date0)
+            }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    // 3x3 統計
+    // ✅ 重點：統計計算丟到 Default，避免卡 Main 導致 ANR
     val stats3x3: StateFlow<ScheduleStats3x3> =
-        combine(_selectedDayMillis, slotsWithTask) { day, slots ->
-            scheduleRepo.calculate3x3Stats(normalizeToStartOfDay(day), slots)
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ScheduleStats3x3())
+        slotsWithTask
+            .mapLatest { slots ->
+                withContext(Dispatchers.Default) {
+                    scheduleRepo.calculate3x3Stats(_selectedDayMillis.value, slots)
+                }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ScheduleStats3x3())
 
-    // Snackbar / Toast 訊息
+    // -------------------------
+    // UI message
+    // -------------------------
+
     private val _message = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val message: SharedFlow<String> = _message.asSharedFlow()
 
-    // Dialog 狀態（新增/編輯/衝突）
+    // -------------------------
+    // Dialog state
+    // -------------------------
+
     sealed class SlotDialogState {
         data object Hidden : SlotDialogState()
         data class Editing(val isNew: Boolean, val draft: SlotDraft) : SlotDialogState()
@@ -141,43 +165,45 @@ class ScheduleViewModel(
 
     fun updateDraft(transform: (SlotDraft) -> SlotDraft) {
         val cur = _slotDialog.value
-        if (cur is SlotDialogState.Editing) {
-            _slotDialog.value = cur.copy(draft = transform(cur.draft))
-        } else if (cur is SlotDialogState.Conflict) {
-            _slotDialog.value = cur.copy(draft = transform(cur.draft))
+        _slotDialog.value = when (cur) {
+            is SlotDialogState.Editing -> cur.copy(draft = transform(cur.draft))
+            is SlotDialogState.Conflict -> cur.copy(draft = transform(cur.draft))
+            SlotDialogState.Hidden -> cur
         }
     }
 
     fun openCreateFreeSlotDialog() {
-        viewModelScope.launch {
-            val uid = uidFlow.first()
-            val date0 = normalizeToStartOfDay(_selectedDayMillis.value)
-
-            // 預設 08:00-09:00（或你想改）
-            val start = date0 + 8L * HOUR_MS
-            val end = start + 60L * MIN_MS
-
-            _slotDialog.value = SlotDialogState.Editing(
-                isNew = true,
-                draft = SlotDraft(
-                    ownerUid = uid,
-                    dateMillis = date0,
-                    startTimeMillis = start,
-                    endTimeMillis = end,
-                    localTaskId = null,
-                    customTitle = "",
-                    note = ""
-                )
-            )
+        val uid = requireUidOrNull() ?: run {
+            _message.tryEmit("尚未登入")
+            return
         }
+        val date0 = _selectedDayMillis.value
+        val start = date0 + 8L * HOUR_MS
+        val end = start + 60L * MIN_MS
+
+        _slotDialog.value = SlotDialogState.Editing(
+            isNew = true,
+            draft = SlotDraft(
+                ownerUid = uid,
+                dateMillis = date0,
+                startTimeMillis = start,
+                endTimeMillis = end
+            )
+        )
     }
 
     fun openCreateTaskSlotDialog(taskLocalId: String, taskTitleHint: String? = null) {
-        viewModelScope.launch {
-            val uid = uidFlow.first()
-            val date0 = normalizeToStartOfDay(_selectedDayMillis.value)
+        val uid = requireUidOrNull() ?: run {
+            _message.tryEmit("尚未登入")
+            return
+        }
+        val date0 = _selectedDayMillis.value
 
-            val gap = scheduleRepo.findFirstFreeGapOneHour(uid, date0)
+        viewModelScope.launch {
+            // ✅ 可能會掃當天 slots，丟到 IO/Default 比較安全
+            val gap = withContext(Dispatchers.Default) {
+                scheduleRepo.findFirstFreeGapOneHour(uid, date0)
+            }
             val start = gap?.first ?: (date0 + 8L * HOUR_MS)
             val end = gap?.second ?: (start + 60L * MIN_MS)
 
@@ -189,8 +215,7 @@ class ScheduleViewModel(
                     startTimeMillis = start,
                     endTimeMillis = end,
                     localTaskId = taskLocalId,
-                    customTitle = taskTitleHint ?: "",
-                    note = ""
+                    customTitle = taskTitleHint ?: ""
                 )
             )
         }
@@ -221,24 +246,27 @@ class ScheduleViewModel(
         }
 
         viewModelScope.launch {
-            when (val res = scheduleRepo.saveSlot(draft.toEntity())) {
+            val res = withContext(Dispatchers.IO) {
+                scheduleRepo.saveSlot(draft.toEntity())
+            }
+            when (res) {
                 is SaveSlotResult.Success -> {
                     _message.tryEmit("已儲存排程")
                     _slotDialog.value = SlotDialogState.Hidden
                 }
-                is SaveSlotResult.Error -> {
-                    _message.tryEmit(res.message)
-                }
-                is SaveSlotResult.Conflict -> {
-                    _slotDialog.value = SlotDialogState.Conflict(draft, res.conflictSlot)
-                }
+                is SaveSlotResult.Error -> _message.tryEmit(res.message)
+                is SaveSlotResult.Conflict -> _slotDialog.value =
+                    SlotDialogState.Conflict(draft, res.conflictSlot)
             }
         }
     }
 
     fun deleteSlot(slotId: Long) {
-        viewModelScope.launch {
-            val uid = uidFlow.first()
+        val uid = requireUidOrNull() ?: run {
+            _message.tryEmit("尚未登入")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
             scheduleRepo.softDeleteSlot(uid, slotId)
             _message.tryEmit("已刪除時段")
         }
@@ -247,19 +275,32 @@ class ScheduleViewModel(
     // -------------------------
     // Helpers
     // -------------------------
-    private fun normalizeToStartOfDay(millis: Long): Long {
-        val cal = Calendar.getInstance().apply {
-            timeInMillis = millis
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        return cal.timeInMillis
-    }
 
     companion object {
         private const val MIN_MS = 60_000L
         private const val HOUR_MS = 3_600_000L
     }
+}
+
+private fun startOfDay(millis: Long): Long {
+    val cal = Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return cal.timeInMillis
+}
+
+private fun startOfMonth(millis: Long): Long {
+    val cal = Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.DAY_OF_MONTH, 1)
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+    return cal.timeInMillis
 }

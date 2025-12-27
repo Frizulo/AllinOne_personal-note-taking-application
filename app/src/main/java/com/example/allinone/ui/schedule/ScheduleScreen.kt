@@ -8,9 +8,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -37,19 +40,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.allinone.data.local.ScheduleSlotWithTask
+import com.example.allinone.data.local.entities.ScheduleSlotEntity
 import com.example.allinone.data.local.entities.TaskEntity
+import com.example.allinone.data.repo.ScheduleStats3x3
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.zIndex
+
+
 
 @Composable
 fun ScheduleScreen(
@@ -58,6 +69,7 @@ fun ScheduleScreen(
 ) {
     val monthAnchor by viewModel.monthAnchorMillis.collectAsState()
     val selectedDay by viewModel.selectedDayMillis.collectAsState()
+
     val tasks by viewModel.tasksOfSelectedDay.collectAsState()
 
     val mode by viewModel.mode.collectAsState()
@@ -65,9 +77,11 @@ fun ScheduleScreen(
     val stats by viewModel.stats3x3.collectAsState()
     val dialogState by viewModel.slotDialog.collectAsState()
 
+    var isCalendarExpanded by remember { mutableStateOf(false) } // false=週, true=月
+
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(Unit) {
-        viewModel.message.collect { msg ->
+        viewModel.message.collect { msg: String ->
             snackbarHostState.showSnackbar(msg)
         }
     }
@@ -77,110 +91,294 @@ fun ScheduleScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
+
         Column(
-            Modifier
+            modifier = Modifier
+                .fillMaxSize()
                 .padding(innerPadding)
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
 
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = viewModel::gotoPrevMonth) { Text("◀") }
-                Text(
-                    text = monthModel.title,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center
-                )
-                IconButton(onClick = viewModel::gotoNextMonth) { Text("▶") }
-            }
-
-            Spacer(Modifier.height(8.dp))
-
-            Row(Modifier.fillMaxWidth()) {
-                listOf("日", "一", "二", "三", "四", "五", "六").forEach {
-                    Text(it, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-                }
-            }
+            // ========== 上半段：固定區（不跟清單一起滾） ==========
+            CalendarHeader(
+                title = monthModel.title,
+                expanded = isCalendarExpanded,
+                onPrev = {
+                    if (isCalendarExpanded) {
+                        viewModel.gotoPrevMonth()
+                    } else {
+                        val prev = selectedDay - 7L * 24 * 60 * 60 * 1000
+                        viewModel.selectDay(prev)
+                        viewModel.setMonthAnchor(prev)
+                    }
+                },
+                onNext = {
+                    if (isCalendarExpanded) {
+                        viewModel.gotoNextMonth()
+                    } else {
+                        val next = selectedDay + 7L * 24 * 60 * 60 * 1000
+                        viewModel.selectDay(next)
+                        viewModel.setMonthAnchor(next)
+                    }
+                },
+                onToggle = { isCalendarExpanded = !isCalendarExpanded }
+            )
 
             Spacer(Modifier.height(6.dp))
 
-            MonthGrid(
-                month = monthModel,
-                selectedDayMillis = selectedDay,
-                onDayClick = viewModel::selectDay
-            )
+            WeekdaysRow()
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(6.dp))
 
-            TabRow(selectedTabIndex = if (mode == ScheduleViewModel.Mode.Tasks) 0 else 1) {
-                Tab(
-                    selected = mode == ScheduleViewModel.Mode.Tasks,
-                    onClick = { viewModel.setMode(ScheduleViewModel.Mode.Tasks) },
-                    text = { Text("當天任務") }
-                )
-                Tab(
-                    selected = mode == ScheduleViewModel.Mode.Timeline,
-                    onClick = { viewModel.setMode(ScheduleViewModel.Mode.Timeline) },
-                    text = { Text("時間管理") }
+            Box(Modifier.zIndex(1f)) {
+                CalendarSection(
+                    month = monthModel,
+                    selectedDayMillis = selectedDay,
+                    expanded = isCalendarExpanded,
+                    onDayClick = { day ->
+                        viewModel.selectDay(day)
+                        viewModel.setMonthAnchor(day)
+                        android.util.Log.d("Schedule", "clicked day=${formatYmd(day)}")
+123
+                    }
                 )
             }
 
             Spacer(Modifier.height(10.dp))
 
-            when (mode) {
-                ScheduleViewModel.Mode.Tasks -> {
-                    TasksPanel(
-                        selectedDayMillis = selectedDay,
-                        tasks = tasks,
-                        onTaskClick = onTaskClick,
-                        onScheduleTask = { task ->
-                            viewModel.openCreateTaskSlotDialog(
-                                taskLocalId = task.localId,
-                                taskTitleHint = task.title
+            // ========== 下半段：佔滿剩餘高度（清單可滑） ==========
+            Box(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.fillMaxSize()) {
+
+                    TabRow(selectedTabIndex = if (mode == ScheduleViewModel.Mode.Tasks) 0 else 1) {
+                        Tab(
+                            selected = mode == ScheduleViewModel.Mode.Tasks,
+                            onClick = { viewModel.setMode(ScheduleViewModel.Mode.Tasks) },
+                            text = { Text("當天任務") }
+                        )
+                        Tab(
+                            selected = mode == ScheduleViewModel.Mode.Timeline,
+                            onClick = { viewModel.setMode(ScheduleViewModel.Mode.Timeline) },
+                            text = { Text("時間管理") }
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    when (mode) {
+                        ScheduleViewModel.Mode.Tasks -> {
+                            TasksPanel(
+                                tasks = tasks,
+                                onTaskClick = onTaskClick,
+                                onScheduleTask = { task ->
+                                    viewModel.openCreateTaskSlotDialog(
+                                        taskLocalId = task.localId,
+                                        taskTitleHint = task.title
+                                    )
+                                }
                             )
                         }
-                    )
-                }
 
-                ScheduleViewModel.Mode.Timeline -> {
-                    TimelinePanel(
-                        selectedDayMillis = selectedDay,
-                        slots = slots,
-                        stats = stats,
-                        onAddFreeSlot = { viewModel.openCreateFreeSlotDialog() },
-                        onEditSlot = { slotEntity, taskTitle ->
-                            viewModel.openEditSlotDialog(slotEntity, taskTitle)
-                        },
-                        onDeleteSlot = { slotId ->
-                            viewModel.deleteSlot(slotId)
+                        ScheduleViewModel.Mode.Timeline -> {
+                            TimelinePanel(
+                                selectedDayMillis = selectedDay,
+                                slots = slots,
+                                stats = stats,
+                                onAddFreeSlot = { viewModel.openCreateFreeSlotDialog() },
+                                onEditSlot = { slot, taskTitle ->
+                                    viewModel.openEditSlotDialog(slot, taskTitle)
+                                },
+                                onDeleteSlot = { slotId -> viewModel.deleteSlot(slotId) }
+                            )
                         }
-                    )
+                    }
                 }
             }
-        }
 
-        SlotDialogs(
-            dialogState = dialogState,
-            onDismiss = viewModel::closeSlotDialog,
-            onUpdateDraft = viewModel::updateDraft,
-            onSave = viewModel::saveDraft
+            // ✅ 你的 SlotDialogs 保留（把你原本那個 SlotDialogs 函式貼回同檔案即可）
+            SlotDialogs(
+                dialogState = dialogState,
+                onDismiss = viewModel::closeSlotDialog,
+                onUpdateDraft = viewModel::updateDraft,
+                onSave = viewModel::saveDraft
+            )
+        }
+    }
+}
+
+/* ---------------- Header / Weekdays ---------------- */
+
+@Composable
+private fun CalendarHeader(
+    title: String,
+    expanded: Boolean,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onToggle: () -> Unit
+) {
+    // ✅ 把「展開/收合」跟月份列放同一區塊，避免跑版
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = if (expanded) "月曆（整月）" else "月曆（週）",
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.weight(1f)
         )
+        TextButton(onClick = onToggle) {
+            Text(if (expanded) "收合" else "展開")
+        }
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        IconButton(onClick = onPrev) { Text("◀") }
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            textAlign = TextAlign.Center
+        )
+        IconButton(onClick = onNext) { Text("▶") }
     }
 }
 
 @Composable
-private fun TasksPanel(
+private fun WeekdaysRow() {
+    Row(Modifier.fillMaxWidth()) {
+        listOf("日", "一", "二", "三", "四", "五", "六").forEach {
+            Text(it, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+        }
+    }
+}
+
+/* ---------------- Calendar Section (週/月) ---------------- */
+
+@Composable
+private fun CalendarSection(
+    month: MonthModel,
     selectedDayMillis: Long,
+    expanded: Boolean,
+    onDayClick: (Long) -> Unit
+) {
+    val selectedKey = remember(selectedDayMillis) { dayKey(selectedDayMillis) }
+
+    val weekCells: List<DayCell?> = remember(month, selectedKey) {
+        val idx = month.cells.indexOfFirst { cell ->
+            cell != null && dayKey(cell.millis) == selectedKey
+        }
+        if (idx == -1) month.cells.take(7)
+        else {
+            val rowStart = (idx / 7) * 7
+            month.cells.subList(rowStart, rowStart + 7)
+        }
+    }
+
+    if (expanded) {
+        MonthGrid(month, selectedDayMillis, onDayClick)
+    } else {
+        WeekRow(weekCells, selectedDayMillis, onDayClick)
+    }
+}
+
+@Composable
+private fun WeekRow(
+    weekCells: List<DayCell?>,
+    selectedDayMillis: Long,
+    onDayClick: (Long) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        weekCells.forEach { cell ->
+            DayCellBox(
+                cell = cell,
+                selectedDayMillis = selectedDayMillis,
+                onDayClick = onDayClick,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MonthGrid(
+    month: MonthModel,
+    selectedDayMillis: Long,
+    onDayClick: (Long) -> Unit
+) {
+    val rows = month.cells.chunked(7)
+    Column(Modifier.fillMaxWidth()) {
+        rows.forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { cell ->
+                    DayCellBox(
+                        cell = cell,
+                        selectedDayMillis = selectedDayMillis,
+                        onDayClick = onDayClick,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+        }
+    }
+}
+
+@Composable
+private fun DayCellBox(
+    cell: DayCell?,
+    selectedDayMillis: Long,
+    onDayClick: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bg = when {
+        cell == null -> Color.Transparent
+        isSameDayFast(cell.millis, selectedDayMillis) ->
+            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    }
+
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(12.dp))
+            .background(bg)
+            // ✅ 不用 clickable，改用 pointerInput 更穩（避免被其他 clickable/scroll 互搶）
+            .pointerInput(cell?.millis) {
+                if (cell == null) return@pointerInput
+                detectTapGestures(
+                    onTap = { onDayClick(cell.millis) }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = cell?.dayText ?: "")
+    }
+}
+
+
+/* ---------------- Panels ---------------- */
+
+@Composable
+private fun TasksPanel(
     tasks: List<TaskEntity>,
     onTaskClick: (TaskEntity) -> Unit,
     onScheduleTask: (TaskEntity) -> Unit
 ) {
-    Text("當天任務（${formatYmd(selectedDayMillis)}）", style = MaterialTheme.typography.titleMedium)
-    Spacer(Modifier.height(6.dp))
-
     if (tasks.isEmpty()) {
         Text("這天沒有設定 due date 的任務。")
-    } else {
-        tasks.forEach { t ->
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        items(tasks, key = { it.localId }) { t ->
             ListItem(
                 headlineContent = { Text(t.title) },
                 supportingContent = { Text(t.detail) },
@@ -197,10 +395,10 @@ private fun TasksPanel(
 @Composable
 private fun TimelinePanel(
     selectedDayMillis: Long,
-    slots: List<com.example.allinone.data.local.ScheduleSlotWithTask>,
-    stats: com.example.allinone.data.repo.ScheduleStats3x3,
+    slots: List<ScheduleSlotWithTask>,
+    stats: ScheduleStats3x3,
     onAddFreeSlot: () -> Unit,
-    onEditSlot: (com.example.allinone.data.local.entities.ScheduleSlotEntity, String?) -> Unit,
+    onEditSlot: (ScheduleSlotEntity, String?) -> Unit,
     onDeleteSlot: (Long) -> Unit
 ) {
     Row(
@@ -215,7 +413,7 @@ private fun TimelinePanel(
         Button(onClick = onAddFreeSlot) { Text("+ 新增時段") }
     }
 
-    Spacer(Modifier.height(8.dp))
+    Spacer(Modifier.height(6.dp))
 
     Text(
         "統計（分鐘）— 早: T=${stats.morningTotal / 60000} 任務=${stats.morningTask / 60000} 純=${stats.morningFree / 60000}",
@@ -230,32 +428,87 @@ private fun TimelinePanel(
         style = MaterialTheme.typography.bodySmall
     )
 
-    Spacer(Modifier.height(10.dp))
+    Spacer(Modifier.height(8.dp))
 
     if (slots.isEmpty()) {
         Text("今天尚未安排任何時段。")
         return
     }
 
-    slots.forEach { item ->
-        val s = item.slot
-        val title = item.taskTitle ?: s.customTitle ?: "（未命名時段）"
-        val timeText = "${formatHm(s.startTimeMillis)} - ${formatHm(s.endTimeMillis)}"
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        items(slots, key = { it.slot.slotId }) { item ->
+            val s = item.slot
+            val title = item.taskTitle ?: s.customTitle ?: "（未命名時段）"
+            val timeText = "${formatHm(s.startTimeMillis)} - ${formatHm(s.endTimeMillis)}"
 
-        ListItem(
-            headlineContent = { Text(title) },
-            supportingContent = { Text(timeText) },
-            trailingContent = {
-                Row {
-                    TextButton(onClick = { onEditSlot(s, item.taskTitle) }) { Text("編輯") }
-                    TextButton(onClick = { onDeleteSlot(s.slotId) }) { Text("刪除") }
+            ListItem(
+                headlineContent = { Text(title) },
+                supportingContent = { Text(timeText) },
+                trailingContent = {
+                    Row {
+                        TextButton(onClick = { onEditSlot(s, item.taskTitle) }) { Text("編輯") }
+                        TextButton(onClick = { onDeleteSlot(s.slotId) }) { Text("刪除") }
+                    }
                 }
-            }
-        )
-        HorizontalDivider()
+            )
+            HorizontalDivider()
+        }
     }
 }
 
+/* ---------------- Month Model + Utils ---------------- */
+
+private data class DayCell(val millis: Long, val dayText: String)
+private data class MonthModel(val title: String, val cells: List<DayCell?>)
+
+private fun buildMonthModel(anchorMillis: Long): MonthModel {
+    val cal = Calendar.getInstance()
+    cal.timeInMillis = anchorMillis
+    cal.set(Calendar.DAY_OF_MONTH, 1)
+
+    val year = cal.get(Calendar.YEAR)
+    val month = cal.get(Calendar.MONTH)
+
+    val title = "${year}年${month + 1}月"
+
+    val firstDayOfWeek = cal.get(Calendar.DAY_OF_WEEK) // 1=Sun..7=Sat
+    val leadingBlanks = firstDayOfWeek - 1
+    val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+
+    val cells = ArrayList<DayCell?>()
+    repeat(leadingBlanks) { cells.add(null) }
+
+    for (d in 1..daysInMonth) {
+        val c = Calendar.getInstance()
+        c.set(year, month, d, 0, 0, 0)
+        c.set(Calendar.MILLISECOND, 0)
+        cells.add(DayCell(millis = c.timeInMillis, dayText = d.toString()))
+    }
+
+    while (cells.size % 7 != 0) cells.add(null)
+
+    return MonthModel(title = title, cells = cells)
+}
+
+private fun dayKey(millis: Long): Int {
+    val c = Calendar.getInstance().apply { timeInMillis = millis }
+    return c.get(Calendar.YEAR) * 1000 + c.get(Calendar.DAY_OF_YEAR)
+}
+
+private fun isSameDayFast(a: Long, b: Long): Boolean = dayKey(a) == dayKey(b)
+
+private fun formatYmd(millis: Long): String {
+    val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.TAIWAN)
+    return sdf.format(Date(millis))
+}
+
+private fun formatHm(millis: Long): String {
+    val sdf = SimpleDateFormat("HH:mm", Locale.TAIWAN)
+    return sdf.format(Date(millis))
+}
 
 @Composable
 private fun SlotDialogs(
@@ -423,95 +676,6 @@ private fun SlotDialogs(
         }
     }
 }
-
-
-/* --------- 原本月曆元件保留 --------- */
-
-@Composable
-private fun MonthGrid(
-    month: MonthModel,
-    selectedDayMillis: Long,
-    onDayClick: (Long) -> Unit
-) {
-    val rows = month.cells.chunked(7)
-    Column(Modifier.fillMaxWidth()) {
-        rows.forEach { row ->
-            Row(Modifier.fillMaxWidth()) {
-                row.forEach { cell ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .aspectRatio(1f)
-                            .padding(4.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(
-                                when {
-                                    cell == null -> Color.Transparent
-                                    isSameDay(cell.millis, selectedDayMillis) -> MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                                    else -> MaterialTheme.colorScheme.surface
-                                }
-                            )
-                            .clickable(enabled = cell != null) { cell?.let { onDayClick(it.millis) } },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = cell?.dayText ?: "")
-                    }
-                }
-            }
-        }
-    }
-}
-
-private data class DayCell(val millis: Long, val dayText: String)
-private data class MonthModel(val title: String, val cells: List<DayCell?>)
-
-private fun buildMonthModel(anchorMillis: Long): MonthModel {
-    val cal = Calendar.getInstance()
-    cal.timeInMillis = anchorMillis
-    cal.set(Calendar.DAY_OF_MONTH, 1)
-
-    val year = cal.get(Calendar.YEAR)
-    val month = cal.get(Calendar.MONTH)
-
-    val title = "${year}年${month + 1}月"
-
-    val firstDayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
-    val leadingBlanks = firstDayOfWeek - 1
-
-    val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-
-    val cells = ArrayList<DayCell?>()
-    repeat(leadingBlanks) { cells.add(null) }
-
-    for (d in 1..daysInMonth) {
-        val c = Calendar.getInstance()
-        c.set(year, month, d, 0, 0, 0)
-        c.set(Calendar.MILLISECOND, 0)
-        cells.add(DayCell(millis = c.timeInMillis, dayText = d.toString()))
-    }
-
-    while (cells.size % 7 != 0) cells.add(null)
-
-    return MonthModel(title = title, cells = cells)
-}
-
-private fun isSameDay(a: Long, b: Long): Boolean {
-    val ca = Calendar.getInstance().apply { timeInMillis = a }
-    val cb = Calendar.getInstance().apply { timeInMillis = b }
-    return ca.get(Calendar.YEAR) == cb.get(Calendar.YEAR) &&
-            ca.get(Calendar.DAY_OF_YEAR) == cb.get(Calendar.DAY_OF_YEAR)
-}
-
-private fun formatYmd(millis: Long): String {
-    val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.TAIWAN)
-    return sdf.format(Date(millis))
-}
-
-private fun formatHm(millis: Long): String {
-    val sdf = SimpleDateFormat("HH:mm", Locale.TAIWAN)
-    return sdf.format(Date(millis))
-}
-
 
 /**
  * 將純數字 digits（例如 "1130"）顯示成 "11:30"
