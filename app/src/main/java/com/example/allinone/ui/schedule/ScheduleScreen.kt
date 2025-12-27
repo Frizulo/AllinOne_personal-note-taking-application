@@ -2,10 +2,37 @@ package com.example.allinone.ui.schedule
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -14,11 +41,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.allinone.data.local.entities.TaskEntity
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.Calendar
-import androidx.compose.material3.HorizontalDivider
-
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 
 @Composable
 fun ScheduleScreen(
@@ -29,14 +60,9 @@ fun ScheduleScreen(
     val selectedDay by viewModel.selectedDayMillis.collectAsState()
     val tasks by viewModel.tasksOfSelectedDay.collectAsState()
 
-    // 新增：模式（Tasks / Timeline）
     val mode by viewModel.mode.collectAsState()
-
-    // 新增：Timeline slots + stats
     val slots by viewModel.slotsWithTask.collectAsState()
     val stats by viewModel.stats3x3.collectAsState()
-
-    // Dialog / message
     val dialogState by viewModel.slotDialog.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -57,7 +83,6 @@ fun ScheduleScreen(
                 .padding(16.dp)
         ) {
 
-            // Header：月份 + 切換
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 IconButton(onClick = viewModel::gotoPrevMonth) { Text("◀") }
                 Text(
@@ -70,7 +95,6 @@ fun ScheduleScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            // Weekdays
             Row(Modifier.fillMaxWidth()) {
                 listOf("日", "一", "二", "三", "四", "五", "六").forEach {
                     Text(it, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
@@ -79,7 +103,6 @@ fun ScheduleScreen(
 
             Spacer(Modifier.height(6.dp))
 
-            // Month grid
             MonthGrid(
                 month = monthModel,
                 selectedDayMillis = selectedDay,
@@ -88,7 +111,6 @@ fun ScheduleScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            // ✅ 新增：下半部 Tabs
             TabRow(selectedTabIndex = if (mode == ScheduleViewModel.Mode.Tasks) 0 else 1) {
                 Tab(
                     selected = mode == ScheduleViewModel.Mode.Tasks,
@@ -111,9 +133,10 @@ fun ScheduleScreen(
                         tasks = tasks,
                         onTaskClick = onTaskClick,
                         onScheduleTask = { task ->
-                            // ✅ 任務旁的「安排時間」
-                            // localId 型別：你的 TaskEntity.localId 是 String UUID
-                            viewModel.openCreateTaskSlotDialog(taskLocalId = task.localId, taskTitleHint = task.title)
+                            viewModel.openCreateTaskSlotDialog(
+                                taskLocalId = task.localId,
+                                taskTitleHint = task.title
+                            )
                         }
                     )
                 }
@@ -135,7 +158,6 @@ fun ScheduleScreen(
             }
         }
 
-        // ✅ 新增：Slot Dialog（簡化版）
         SlotDialogs(
             dialogState = dialogState,
             onDismiss = viewModel::closeSlotDialog,
@@ -185,13 +207,16 @@ private fun TimelinePanel(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("時間管理（${formatYmd(selectedDayMillis)}）", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        Text(
+            "時間管理（${formatYmd(selectedDayMillis)}）",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.weight(1f)
+        )
         Button(onClick = onAddFreeSlot) { Text("+ 新增時段") }
     }
 
     Spacer(Modifier.height(8.dp))
 
-    // ✅ 先用文字呈現統計（之後再做漂亮卡片/3x3表格）
     Text(
         "統計（分鐘）— 早: T=${stats.morningTotal / 60000} 任務=${stats.morningTask / 60000} 純=${stats.morningFree / 60000}",
         style = MaterialTheme.typography.bodySmall
@@ -231,6 +256,7 @@ private fun TimelinePanel(
     }
 }
 
+
 @Composable
 private fun SlotDialogs(
     dialogState: ScheduleViewModel.SlotDialogState,
@@ -243,32 +269,136 @@ private fun SlotDialogs(
 
         is ScheduleViewModel.SlotDialogState.Editing -> {
             val d = dialogState.draft
+            val date0 = d.dateMillis
+            val step: Int? = 30 // ✅ 保留 30 分鐘步進
+
+            fun hmToDigits(millis: Long): String = formatHm(millis).replace(":", "")
+
+            // ✅ 用 TextFieldValue 才能穩定控制游標/輸入（避免 1103 問題）
+            var start by remember(d.startTimeMillis) {
+                val digits = hmToDigits(d.startTimeMillis)
+                mutableStateOf(TextFieldValue(text = digits, selection = TextRange(digits.length)))
+            }
+            var end by remember(d.endTimeMillis) {
+                val digits = hmToDigits(d.endTimeMillis)
+                mutableStateOf(TextFieldValue(text = digits, selection = TextRange(digits.length)))
+            }
+
+            fun digitsOnly(tfv: TextFieldValue): TextFieldValue {
+                val digits = tfv.text.filter { it.isDigit() }.take(4)
+                return TextFieldValue(
+                    text = digits,
+                    selection = TextRange(digits.length) // 游標永遠在末端，避免插入到中間
+                )
+            }
+
+            val startOff = TimeInput.digitsToOffsetMillis(start.text, allowStepMinutes = step)
+            val endOff = TimeInput.digitsToOffsetMillis(end.text, allowStepMinutes = step)
+
+            val timeError: String? = when {
+                start.text.length < 3 || startOff == null ->
+                    "開始時間格式錯誤（例：0930 或 09:30；分鐘需符合 30 分步進）"
+                end.text.length < 3 || endOff == null ->
+                    "結束時間格式錯誤（例：1800 或 18:00；分鐘需符合 30 分步進）"
+                endOff <= startOff ->
+                    "結束時間必須晚於開始時間"
+                else -> null
+            }
+
             AlertDialog(
                 onDismissRequest = onDismiss,
                 title = { Text(if (dialogState.isNew) "新增時段" else "編輯時段") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        // title（純時間管理必填；任務 slot 可留空）
+
                         OutlinedTextField(
                             value = d.customTitle,
                             onValueChange = { v -> onUpdateDraft { it.copy(customTitle = v) } },
                             label = { Text("時段標題（純時間管理必填）") },
                             singleLine = true
                         )
+
                         OutlinedTextField(
                             value = d.note,
                             onValueChange = { v -> onUpdateDraft { it.copy(note = v) } },
                             label = { Text("備註（選填）") }
                         )
-                        Text("時間：${formatHm(d.startTimeMillis)} - ${formatHm(d.endTimeMillis)}")
-                        Text(
-                            "（下一步再加時間選擇器；目前先用預設時間 + 快速排程）",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+
+                            // --- 開始時間：digits存放 + 視覺轉換顯示HH:mm ---
+                            OutlinedTextField(
+                                value = start,
+                                onValueChange = { input ->
+                                    val cleaned = digitsOnly(input)
+                                    start = cleaned
+
+                                    val off = TimeInput.digitsToOffsetMillis(cleaned.text, allowStepMinutes = step)
+                                    if (off != null) {
+                                        val newStart = TimeOptions.absoluteMillis(date0, off)
+                                        onUpdateDraft { it.copy(startTimeMillis = newStart) }
+
+                                        // end 不合法/早於 start -> 自動推 +1hr（仍符合 30 分步進）
+                                        val endParsed = TimeInput.digitsToOffsetMillis(end.text, allowStepMinutes = step)
+                                        if (endParsed == null || endParsed <= off) {
+                                            val suggested = off + 60L * 60_000L
+                                            val suggestedDigits = TimeOptions.offsetToLabel(suggested).replace(":", "")
+                                            end = TextFieldValue(
+                                                text = suggestedDigits,
+                                                selection = TextRange(suggestedDigits.length)
+                                            )
+                                            val newEnd = TimeOptions.absoluteMillis(date0, suggested)
+                                            onUpdateDraft { it.copy(endTimeMillis = newEnd) }
+                                        }
+                                    }
+                                },
+                                label = { Text("開始 (HH:mm)") },
+                                singleLine = true,
+                                isError = timeError?.contains("開始") == true,
+                                visualTransformation = HhmmVisualTransformation,
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            // --- 結束時間 ---
+                            OutlinedTextField(
+                                value = end,
+                                onValueChange = { input ->
+                                    val cleaned = digitsOnly(input)
+                                    end = cleaned
+
+                                    val off = TimeInput.digitsToOffsetMillis(cleaned.text, allowStepMinutes = step)
+                                    if (off != null) {
+                                        val newEnd = TimeOptions.absoluteMillis(date0, off)
+                                        onUpdateDraft { it.copy(endTimeMillis = newEnd) }
+                                    }
+                                },
+                                label = { Text("結束 (HH:mm)") },
+                                singleLine = true,
+                                isError = timeError != null && (timeError.contains("結束") || timeError.contains("必須晚於")),
+                                visualTransformation = HhmmVisualTransformation,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        if (timeError != null) {
+                            Text(
+                                text = timeError,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            Text(
+                                "限制：30 分鐘步進（分鐘只能 00 或 30）",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
                     }
                 },
                 confirmButton = {
-                    Button(onClick = onSave) { Text("儲存") }
+                    Button(
+                        onClick = onSave,
+                        enabled = timeError == null
+                    ) { Text("儲存") }
                 },
                 dismissButton = {
                     TextButton(onClick = onDismiss) { Text("取消") }
@@ -288,13 +418,12 @@ private fun SlotDialogs(
                                 "請調整時間後再儲存。"
                     )
                 },
-                confirmButton = {
-                    Button(onClick = onDismiss) { Text("了解") }
-                }
+                confirmButton = { Button(onClick = onDismiss) { Text("了解") } }
             )
         }
     }
 }
+
 
 /* --------- 原本月曆元件保留 --------- */
 
@@ -342,11 +471,11 @@ private fun buildMonthModel(anchorMillis: Long): MonthModel {
     cal.set(Calendar.DAY_OF_MONTH, 1)
 
     val year = cal.get(Calendar.YEAR)
-    val month = cal.get(Calendar.MONTH) // 0-11
+    val month = cal.get(Calendar.MONTH)
 
     val title = "${year}年${month + 1}月"
 
-    val firstDayOfWeek = cal.get(Calendar.DAY_OF_WEEK) // 1=Sun..7=Sat
+    val firstDayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
     val leadingBlanks = firstDayOfWeek - 1
 
     val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
@@ -381,4 +510,42 @@ private fun formatYmd(millis: Long): String {
 private fun formatHm(millis: Long): String {
     val sdf = SimpleDateFormat("HH:mm", Locale.TAIWAN)
     return sdf.format(Date(millis))
+}
+
+
+/**
+ * 將純數字 digits（例如 "1130"）顯示成 "11:30"
+ * TextField 內部仍維持 digits，避免 IME 亂序。
+ */
+private object HhmmVisualTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val raw = text.text // digits only
+        val out = buildString {
+            raw.forEachIndexed { i, c ->
+                if (i == 2) append(':')
+                append(c)
+            }
+        }
+
+        val offsetMapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                // digits -> with colon after 2 digits
+                return when {
+                    offset <= 2 -> offset
+                    else -> offset + 1
+                }
+            }
+
+            override fun transformedToOriginal(offset: Int): Int {
+                // with colon -> digits
+                return when {
+                    offset <= 2 -> offset
+                    offset == 3 -> 2
+                    else -> offset - 1
+                }
+            }
+        }
+
+        return TransformedText(AnnotatedString(out), offsetMapping)
+    }
 }
