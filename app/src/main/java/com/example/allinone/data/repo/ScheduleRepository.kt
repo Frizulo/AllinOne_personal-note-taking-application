@@ -35,8 +35,6 @@ class ScheduleRepository(
         }
 
         // 4) customTitle / localTaskId 規則（避免資料狀態混亂）
-        // - 若關聯 task：customTitle 可以留著（但 UI 可不顯示），或你也可以選擇清空
-        // - 若不關聯 task：customTitle 建議必填（至少不要全空白）
         if (slot.localTaskId == null) {
             val title = slot.customTitle?.trim().orEmpty()
             if (title.isEmpty()) {
@@ -79,24 +77,14 @@ class ScheduleRepository(
     }
 
     /**
-     * [缺口 7] Task soft delete 後：slot 轉為純時間管理
-     * - localTaskId -> null
-     * - customTitle 若為 null 則補上 taskTitle（保留可讀性）
-     */
-    suspend fun detachSlotsFromDeletedTask(uid: Long, localTaskId: String, taskTitle: String) {
-        scheduleDao.detachTaskFromSlots(
-            uid = uid,
-            localTaskId = localTaskId,
-            taskTitle = taskTitle,
-            now = System.currentTimeMillis()
-        )
-    }
-
-    /**
      * [缺口 4] 快速排程：找當日第一個 1 小時空檔（08:00~22:00）
      * stepMinutes 建議 30（比較符合 UI 操作）
      */
-    suspend fun findFirstFreeGapOneHour(uid: Long, dateMillis: Long, stepMinutes: Int = 30): Pair<Long, Long>? {
+    suspend fun findFirstFreeGapOneHour(
+        uid: Long,
+        dateMillis: Long,
+        stepMinutes: Int = 30
+    ): Pair<Long, Long>? {
         val slots = scheduleDao.getSlotsByDate(uid, dateMillis)
 
         val start = dateMillis + 8L * HOUR_MS
@@ -121,27 +109,62 @@ class ScheduleRepository(
         return null
     }
 
-    /**
-     * [缺口 5] 3x3 統計（早/中/晚）×（Total/Task/Free）
-     * - Morning: 06–12
-     * - Afternoon: 12–18
-     * - Evening: 18–24 + 00–06（同一天的凌晨也歸 Evening，以維持三段）
-     */
-    fun calculate3x3Stats(dateMillis: Long, slots: List<ScheduleSlotWithTask>): ScheduleStats3x3 {
-        val b0 = dateMillis + 0L * HOUR_MS
+    // -------------------------
+    // ✅ 4x3 統計（睡眠/早/中/晚）×（Total/Task/Free）
+    // - Sleep:     00–06
+    // - Morning:   06–12
+    // - Afternoon: 12–18
+    // - Evening:   18–24
+    // -------------------------
+
+    enum class TimeBucket4 { Sleep, Morning, Afternoon, Evening }
+
+    data class ScheduleStats4x3(
+        val sleepTotal: Long = 0, val sleepTask: Long = 0, val sleepFree: Long = 0,
+        val morningTotal: Long = 0, val morningTask: Long = 0, val morningFree: Long = 0,
+        val afternoonTotal: Long = 0, val afternoonTask: Long = 0, val afternoonFree: Long = 0,
+        val eveningTotal: Long = 0, val eveningTask: Long = 0, val eveningFree: Long = 0,
+    ) {
+        fun add(bucket: TimeBucket4, dur: Long, isTask: Boolean): ScheduleStats4x3 {
+            fun inc(total: Long, task: Long, free: Long): Triple<Long, Long, Long> =
+                if (isTask) Triple(total + dur, task + dur, free)
+                else Triple(total + dur, task, free + dur)
+
+            return when (bucket) {
+                TimeBucket4.Sleep -> {
+                    val (t, tk, fr) = inc(sleepTotal, sleepTask, sleepFree)
+                    copy(sleepTotal = t, sleepTask = tk, sleepFree = fr)
+                }
+                TimeBucket4.Morning -> {
+                    val (t, tk, fr) = inc(morningTotal, morningTask, morningFree)
+                    copy(morningTotal = t, morningTask = tk, morningFree = fr)
+                }
+                TimeBucket4.Afternoon -> {
+                    val (t, tk, fr) = inc(afternoonTotal, afternoonTask, afternoonFree)
+                    copy(afternoonTotal = t, afternoonTask = tk, afternoonFree = fr)
+                }
+                TimeBucket4.Evening -> {
+                    val (t, tk, fr) = inc(eveningTotal, eveningTask, eveningFree)
+                    copy(eveningTotal = t, eveningTask = tk, eveningFree = fr)
+                }
+            }
+        }
+    }
+
+    fun calculate4x3Stats(dateMillis: Long, slots: List<ScheduleSlotWithTask>): ScheduleStats4x3 {
         val b1 = dateMillis + 6L * HOUR_MS
         val b2 = dateMillis + 12L * HOUR_MS
         val b3 = dateMillis + 18L * HOUR_MS
         val b4 = dateMillis + 24L * HOUR_MS
 
-        fun bucket(t: Long): TimeBucket = when {
-            t < b1 -> TimeBucket.Evening
-            t < b2 -> TimeBucket.Morning
-            t < b3 -> TimeBucket.Afternoon
-            else -> TimeBucket.Evening
+        fun bucket(t: Long): TimeBucket4 = when {
+            t < b1 -> TimeBucket4.Sleep
+            t < b2 -> TimeBucket4.Morning
+            t < b3 -> TimeBucket4.Afternoon
+            else -> TimeBucket4.Evening
         }
 
-        val stats = ScheduleStats3x3()
+        var stats = ScheduleStats4x3()
 
         for (item in slots) {
             val s = item.slot.startTimeMillis
@@ -158,13 +181,13 @@ class ScheduleRepository(
                 }
                 val segEnd = min(e, nextBoundary)
                 val dur = segEnd - cur
-
                 val isTask = item.slot.localTaskId != null
-                stats.add(bucket(cur), dur, isTask)
 
+                stats = stats.add(bucket(cur), dur, isTask)
                 cur = segEnd
             }
         }
+
         return stats
     }
 
@@ -195,35 +218,10 @@ class ScheduleRepository(
 }
 
 // --------------------
-// Result / Stats types
+// Result types
 // --------------------
 sealed class SaveSlotResult {
     data object Success : SaveSlotResult()
     data class Error(val message: String) : SaveSlotResult()
     data class Conflict(val conflictSlot: ScheduleSlotEntity) : SaveSlotResult()
-}
-
-enum class TimeBucket { Morning, Afternoon, Evening }
-
-class ScheduleStats3x3 {
-    var morningTotal: Long = 0; var morningTask: Long = 0; var morningFree: Long = 0
-    var afternoonTotal: Long = 0; var afternoonTask: Long = 0; var afternoonFree: Long = 0
-    var eveningTotal: Long = 0; var eveningTask: Long = 0; var eveningFree: Long = 0
-
-    fun add(bucket: TimeBucket, dur: Long, isTask: Boolean) {
-        when (bucket) {
-            TimeBucket.Morning -> {
-                morningTotal += dur
-                if (isTask) morningTask += dur else morningFree += dur
-            }
-            TimeBucket.Afternoon -> {
-                afternoonTotal += dur
-                if (isTask) afternoonTask += dur else afternoonFree += dur
-            }
-            TimeBucket.Evening -> {
-                eveningTotal += dur
-                if (isTask) eveningTask += dur else eveningFree += dur
-            }
-        }
-    }
 }

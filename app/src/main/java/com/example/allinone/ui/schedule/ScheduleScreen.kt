@@ -1,5 +1,6 @@
 package com.example.allinone.ui.schedule
 
+import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,25 +9,30 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,20 +53,16 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.allinone.data.local.ScheduleSlotWithTask
 import com.example.allinone.data.local.entities.ScheduleSlotEntity
 import com.example.allinone.data.local.entities.TaskEntity
-import com.example.allinone.data.repo.ScheduleStats3x3
+import com.example.allinone.data.repo.ScheduleRepository
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.zIndex
-
-
 
 @Composable
 fun ScheduleScreen(
@@ -69,15 +71,23 @@ fun ScheduleScreen(
 ) {
     val monthAnchor by viewModel.monthAnchorMillis.collectAsState()
     val selectedDay by viewModel.selectedDayMillis.collectAsState()
-
     val tasks by viewModel.tasksOfSelectedDay.collectAsState()
 
     val mode by viewModel.mode.collectAsState()
     val slots by viewModel.slotsWithTask.collectAsState()
-    val stats by viewModel.stats3x3.collectAsState()
+    val stats by viewModel.stats4x3.collectAsState()
     val dialogState by viewModel.slotDialog.collectAsState()
 
     var isCalendarExpanded by remember { mutableStateOf(false) } // false=週, true=月
+
+    // ✅ 防止連點 / 抖動造成過度重組或重複 DB 請求（容易觸發 ANR）
+    var lastNavAt by remember { mutableStateOf(0L) }
+    fun throttled(action: () -> Unit) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastNavAt < 280L) return
+        lastNavAt = now
+        action()
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(Unit) {
@@ -87,6 +97,7 @@ fun ScheduleScreen(
     }
 
     val monthModel = remember(monthAnchor) { buildMonthModel(monthAnchor) }
+    val weekMonthModel = remember(selectedDay) { buildMonthModel(selectedDay) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -98,59 +109,80 @@ fun ScheduleScreen(
                 .padding(innerPadding)
                 .padding(12.dp)
         ) {
-
-            // ========== 上半段：固定區（不跟清單一起滾） ==========
             CalendarHeader(
-                title = monthModel.title,
+                title = if (isCalendarExpanded) monthModel.title else weekMonthModel.title,
                 expanded = isCalendarExpanded,
                 onPrev = {
-                    if (isCalendarExpanded) {
-                        viewModel.gotoPrevMonth()
-                    } else {
-                        val prev = selectedDay - 7L * 24 * 60 * 60 * 1000
-                        viewModel.selectDay(prev)
-                        viewModel.setMonthAnchor(prev)
+                    throttled {
+                        if (isCalendarExpanded) {
+                            viewModel.gotoPrevMonth()
+                        } else {
+                            val prevWeek = selectedDay - WEEK_MS
+                            viewModel.selectDay(prevWeek)
+                            // 週模式：只有跨月才更新 anchor，避免每次都重建月資料/觸發重算
+                            if (!isSameMonthFast(prevWeek, monthAnchor)) {
+                                viewModel.setMonthAnchor(prevWeek)
+                            }
+                        }
                     }
                 },
                 onNext = {
-                    if (isCalendarExpanded) {
-                        viewModel.gotoNextMonth()
-                    } else {
-                        val next = selectedDay + 7L * 24 * 60 * 60 * 1000
-                        viewModel.selectDay(next)
-                        viewModel.setMonthAnchor(next)
+                    throttled {
+                        if (isCalendarExpanded) {
+                            viewModel.gotoNextMonth()
+                        } else {
+                            val nextWeek = selectedDay + WEEK_MS
+                            viewModel.selectDay(nextWeek)
+                            if (!isSameMonthFast(nextWeek, monthAnchor)) {
+                                viewModel.setMonthAnchor(nextWeek)
+                            }
+                        }
                     }
                 },
-                onToggle = { isCalendarExpanded = !isCalendarExpanded }
+                onToggle = {
+                    throttled {
+                        isCalendarExpanded = !isCalendarExpanded
+                        // 切到月模式時，確保 title 的月份跟著目前選到的那天
+                        if (isCalendarExpanded && !isSameMonthFast(selectedDay, monthAnchor)) {
+                            viewModel.setMonthAnchor(selectedDay)
+                        }
+                    }
+                }
             )
 
             Spacer(Modifier.height(6.dp))
-
             WeekdaysRow()
-
             Spacer(Modifier.height(6.dp))
 
-            Box(Modifier.zIndex(1f)) {
-                CalendarSection(
-                    month = monthModel,
-                    selectedDayMillis = selectedDay,
-                    expanded = isCalendarExpanded,
-                    onDayClick = { day ->
+            CalendarSection(
+                month = monthModel,
+                selectedDayMillis = selectedDay,
+                expanded = isCalendarExpanded,
+                onDayClick = { day ->
+                    throttled {
                         viewModel.selectDay(day)
-                        viewModel.setMonthAnchor(day)
-                        android.util.Log.d("Schedule", "clicked day=${formatYmd(day)}")
-123
+
+                        // ✅ 週模式：只有跨月才更新 anchor（避免每次點都重算）
+                        if (!isCalendarExpanded) {
+                            return@throttled
+                        }
+
+                        // ✅ 月模式：anchor 只在「點到其他月份的日期」時才改
+                        if (!isSameMonthFast(day, monthAnchor)) {
+                            viewModel.setMonthAnchor(day)
+                        }
                     }
-                )
-            }
+                }
+            )
 
             Spacer(Modifier.height(10.dp))
 
-            // ========== 下半段：佔滿剩餘高度（清單可滑） ==========
             Box(modifier = Modifier.weight(1f)) {
                 Column(modifier = Modifier.fillMaxSize()) {
 
-                    TabRow(selectedTabIndex = if (mode == ScheduleViewModel.Mode.Tasks) 0 else 1) {
+                    PrimaryTabRow(
+                        selectedTabIndex = if (mode == ScheduleViewModel.Mode.Tasks) 0 else 1
+                    ) {
                         Tab(
                             selected = mode == ScheduleViewModel.Mode.Tasks,
                             onClick = { viewModel.setMode(ScheduleViewModel.Mode.Tasks) },
@@ -167,16 +199,27 @@ fun ScheduleScreen(
 
                     when (mode) {
                         ScheduleViewModel.Mode.Tasks -> {
-                            TasksPanel(
-                                tasks = tasks,
-                                onTaskClick = onTaskClick,
-                                onScheduleTask = { task ->
-                                    viewModel.openCreateTaskSlotDialog(
-                                        taskLocalId = task.localId,
-                                        taskTitleHint = task.title
-                                    )
-                                }
-                            )
+                            Column(modifier = Modifier.fillMaxSize()) {
+
+                                // ✅ 顯示「目前選到哪天」
+                                Text(
+                                    text = "當天任務（${formatYmd(startOfDayMillis(selectedDay))}）",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    modifier = Modifier.padding(horizontal = 2.dp, vertical = 6.dp)
+                                )
+
+                                TasksPanel(
+                                    tasks = tasks,
+                                    slots = slots,
+                                    onTaskClick = onTaskClick,
+                                    onScheduleTask = { task ->
+                                        viewModel.openCreateTaskSlotDialog(
+                                            taskLocalId = task.localId,
+                                            taskTitleHint = task.title
+                                        )
+                                    }
+                                )
+                            }
                         }
 
                         ScheduleViewModel.Mode.Timeline -> {
@@ -195,7 +238,6 @@ fun ScheduleScreen(
                 }
             }
 
-            // ✅ 你的 SlotDialogs 保留（把你原本那個 SlotDialogs 函式貼回同檔案即可）
             SlotDialogs(
                 dialogState = dialogState,
                 onDismiss = viewModel::closeSlotDialog,
@@ -216,7 +258,6 @@ private fun CalendarHeader(
     onNext: () -> Unit,
     onToggle: () -> Unit
 ) {
-    // ✅ 把「展開/收合」跟月份列放同一區塊，避免跑版
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -263,25 +304,36 @@ private fun CalendarSection(
     expanded: Boolean,
     onDayClick: (Long) -> Unit
 ) {
-    val selectedKey = remember(selectedDayMillis) { dayKey(selectedDayMillis) }
-
-    val weekCells: List<DayCell?> = remember(month, selectedKey) {
-        val idx = month.cells.indexOfFirst { cell ->
-            cell != null && dayKey(cell.millis) == selectedKey
-        }
-        if (idx == -1) month.cells.take(7)
-        else {
-            val rowStart = (idx / 7) * 7
-            month.cells.subList(rowStart, rowStart + 7)
-        }
-    }
-
     if (expanded) {
         MonthGrid(month, selectedDayMillis, onDayClick)
     } else {
+        // ✅ 週模式不要再從 month.cells 做 index/subList 切。
+        //    monthAnchor 在跨月/快速操作時可能暫時不同步，會導致週列資料不一致甚至卡頓。
+        val weekCells: List<DayCell?> = remember(selectedDayMillis) { buildWeekCells(selectedDayMillis) }
         WeekRow(weekCells, selectedDayMillis, onDayClick)
     }
 }
+
+private fun buildWeekCells(centerDayMillis: Long): List<DayCell> {
+    val cal = Calendar.getInstance().apply {
+        timeInMillis = centerDayMillis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+        set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY)
+    }
+
+    return (0..6).map { offset ->
+        val c = cal.clone() as Calendar
+        c.add(Calendar.DAY_OF_MONTH, offset)
+        DayCell(
+            millis = c.timeInMillis,
+            dayText = c.get(Calendar.DAY_OF_MONTH).toString()
+        )
+    }
+}
+
 
 @Composable
 private fun WeekRow(
@@ -347,12 +399,8 @@ private fun DayCellBox(
             .aspectRatio(1f)
             .clip(RoundedCornerShape(12.dp))
             .background(bg)
-            // ✅ 不用 clickable，改用 pointerInput 更穩（避免被其他 clickable/scroll 互搶）
-            .pointerInput(cell?.millis) {
-                if (cell == null) return@pointerInput
-                detectTapGestures(
-                    onTap = { onDayClick(cell.millis) }
-                )
+            .clickable(enabled = cell != null) {
+                if (cell != null) onDayClick(cell.millis)
             },
         contentAlignment = Alignment.Center
     ) {
@@ -360,34 +408,111 @@ private fun DayCellBox(
     }
 }
 
-
 /* ---------------- Panels ---------------- */
 
 @Composable
 private fun TasksPanel(
     tasks: List<TaskEntity>,
+    slots: List<ScheduleSlotWithTask>,
     onTaskClick: (TaskEntity) -> Unit,
     onScheduleTask: (TaskEntity) -> Unit
 ) {
-    if (tasks.isEmpty()) {
-        Text("這天沒有設定 due date 的任務。")
-        return
+    val scheduledCountByTaskId = remember(slots) {
+        val m = mutableMapOf<String, Int>()
+        slots.forEach { item ->
+            val id = item.slot.localTaskId
+            if (id != null) m[id] = (m[id] ?: 0) + 1
+        }
+        m
+    }
+
+    val (scheduled, unscheduled) = remember(tasks, scheduledCountByTaskId) {
+        tasks.partition { t -> (scheduledCountByTaskId[t.localId] ?: 0) > 0 }
     }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(tasks, key = { it.localId }) { t ->
-            ListItem(
-                headlineContent = { Text(t.title) },
-                supportingContent = { Text(t.detail) },
-                trailingContent = {
-                    TextButton(onClick = { onScheduleTask(t) }) { Text("安排時間") }
-                },
-                modifier = Modifier.clickable { onTaskClick(t) }
-            )
-            HorizontalDivider()
+        item { Text("未排程", style = MaterialTheme.typography.titleSmall) }
+
+        if (unscheduled.isEmpty()) {
+            item { Text("全部都已排程 ✅", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)) }
+        } else {
+            items(unscheduled, key = { it.localId }) { t ->
+                TaskCardRow(
+                    task = t,
+                    badgeText = "未排",
+                    badgeColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+                    onTaskClick = onTaskClick,
+                    onScheduleTask = onScheduleTask
+                )
+            }
+        }
+
+        item {
+            Spacer(Modifier.height(6.dp))
+            Text("已排程", style = MaterialTheme.typography.titleSmall)
+        }
+
+        if (scheduled.isEmpty()) {
+            item { Text("目前沒有已排程的任務。", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)) }
+        } else {
+            items(scheduled, key = { it.localId }) { t ->
+                val n = scheduledCountByTaskId[t.localId] ?: 0
+                TaskCardRow(
+                    task = t,
+                    badgeText = "已排 $n 段",
+                    badgeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                    onTaskClick = onTaskClick,
+                    onScheduleTask = onScheduleTask
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskCardRow(
+    task: TaskEntity,
+    badgeText: String,
+    badgeColor: Color,
+    onTaskClick: (TaskEntity) -> Unit,
+    onScheduleTask: (TaskEntity) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        tonalElevation = 1.dp,
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onTaskClick(task) }
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(badgeColor)
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            ) { Text(badgeText, style = MaterialTheme.typography.bodySmall) }
+
+            Spacer(Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(task.title, style = MaterialTheme.typography.titleMedium)
+                if (task.detail.isNotBlank()) {
+                    Text(
+                        task.detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    )
+                }
+            }
+
+            TextButton(onClick = { onScheduleTask(task) }) { Text("安排") }
         }
     }
 }
@@ -396,70 +521,300 @@ private fun TasksPanel(
 private fun TimelinePanel(
     selectedDayMillis: Long,
     slots: List<ScheduleSlotWithTask>,
-    stats: ScheduleStats3x3,
+    stats: ScheduleRepository.ScheduleStats4x3,
     onAddFreeSlot: () -> Unit,
     onEditSlot: (ScheduleSlotEntity, String?) -> Unit,
     onDeleteSlot: (Long) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            "時間管理（${formatYmd(selectedDayMillis)}）",
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f)
-        )
-        Button(onClick = onAddFreeSlot) { Text("+ 新增時段") }
-    }
+    val day0 = remember(selectedDayMillis) { startOfDayMillis(selectedDayMillis) }
 
-    Spacer(Modifier.height(6.dp))
+    val hourHeight = 56.dp
+    val minuteHeightDp = hourHeight / 60f
+    val totalHeight = hourHeight * 24
 
-    Text(
-        "統計（分鐘）— 早: T=${stats.morningTotal / 60000} 任務=${stats.morningTask / 60000} 純=${stats.morningFree / 60000}",
-        style = MaterialTheme.typography.bodySmall
-    )
-    Text(
-        "統計（分鐘）— 中: T=${stats.afternoonTotal / 60000} 任務=${stats.afternoonTask / 60000} 純=${stats.afternoonFree / 60000}",
-        style = MaterialTheme.typography.bodySmall
-    )
-    Text(
-        "統計（分鐘）— 晚: T=${stats.eveningTotal / 60000} 任務=${stats.eveningTask / 60000} 純=${stats.eveningFree / 60000}",
-        style = MaterialTheme.typography.bodySmall
-    )
+    val scrollState = rememberScrollState()
+    val sorted = remember(slots) { slots.sortedBy { it.slot.startTimeMillis } }
 
-    Spacer(Modifier.height(8.dp))
+    Column(modifier = Modifier.fillMaxSize()) {
 
-    if (slots.isEmpty()) {
-        Text("今天尚未安排任何時段。")
-        return
-    }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("時間管理（${formatYmd(day0)}）", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "統計：分鐘(任務/純行程)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                )
+            }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        items(slots, key = { it.slot.slotId }) { item ->
-            val s = item.slot
-            val title = item.taskTitle ?: s.customTitle ?: "（未命名時段）"
-            val timeText = "${formatHm(s.startTimeMillis)} - ${formatHm(s.endTimeMillis)}"
+            Button(
+                onClick = onAddFreeSlot,
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.height(40.dp)
+            ) { Text("+ 新增行程") }
+        }
 
-            ListItem(
-                headlineContent = { Text(title) },
-                supportingContent = { Text(timeText) },
-                trailingContent = {
-                    Row {
-                        TextButton(onClick = { onEditSlot(s, item.taskTitle) }) { Text("編輯") }
-                        TextButton(onClick = { onDeleteSlot(s.slotId) }) { Text("刪除") }
-                    }
-                }
+        Spacer(Modifier.height(10.dp))
+        StatsRow4(stats = stats)
+        Spacer(Modifier.height(10.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .verticalScroll(scrollState)
+        ) {
+            TimelineBackground(
+                totalHeight = totalHeight,
+                hourHeight = hourHeight
             )
-            HorizontalDivider()
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(totalHeight)
+            ) {
+                sorted.forEach { item ->
+                    val s = item.slot
+                    val title = item.taskTitle ?: s.customTitle ?: "（未命名）"
+                    val isTask = s.localTaskId != null
+
+                    val startMin = minutesFromDayStart(day0, s.startTimeMillis)
+                    val endMin = minutesFromDayStart(day0, s.endTimeMillis)
+
+                    val safeStart = startMin.coerceIn(0, 24 * 60)
+                    val safeEnd = endMin.coerceIn(0, 24 * 60).coerceAtLeast(safeStart + 1)
+                    val durMin = safeEnd - safeStart
+
+                    val top = minuteHeightDp * safeStart
+                    val height = minuteHeightDp * durMin
+
+                    TimelineSlotBlock(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 74.dp, end = 16.dp)
+                            .offset(y = top)
+                            .height(height),
+                        title = title,
+                        timeText = "${formatHm(s.startTimeMillis)} - ${formatHm(s.endTimeMillis)}",
+                        isTask = isTask,
+                        onEdit = { onEditSlot(s, item.taskTitle) },
+                        onDelete = { onDeleteSlot(s.slotId) }
+                    )
+                }
+            }
         }
     }
 }
 
-/* ---------------- Month Model + Utils ---------------- */
+/* ---------------- Timeline background + slot styles ---------------- */
+
+@Composable
+private fun TimelineBackground(
+    totalHeight: Dp,
+    hourHeight: Dp,
+    railWidth: Dp = 56.dp,
+    labelBaselineAdjust: Dp = 6.dp,
+    showBoldAt: Set<Int> = setOf(6, 12, 18)
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(totalHeight)
+    ) {
+        fun segTop(h: Int) = hourHeight * h
+        fun segHeight(from: Int, to: Int) = hourHeight * (to - from)
+
+        SegmentBg(railWidth, segTop(0), segHeight(0, 6), MaterialTheme.colorScheme.secondary, 0.30f) // Sleep
+        SegmentBg(railWidth, segTop(6), segHeight(6, 12), MaterialTheme.colorScheme.primary, 0.30f) // Morning
+        SegmentBg(railWidth, segTop(12), segHeight(12, 18), MaterialTheme.colorScheme.tertiary, 0.30f) // Afternoon
+        SegmentBg(railWidth, segTop(18), segHeight(18, 24), MaterialTheme.colorScheme.error, 0.30f) // Evening
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(totalHeight)
+        ) {
+            repeat(24) { h ->
+                val isBold = h in showBoldAt
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(if (isBold) 2.dp else 1.dp)
+                        .padding(start = railWidth, end = 12.dp)
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = if (isBold) 0.60f else 0.28f))
+                )
+                Spacer(Modifier.height(hourHeight - (if (isBold) 2.dp else 1.dp)))
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .width(railWidth)
+                .fillMaxHeight()
+        ) {
+            repeat(24) { h ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset(y = (hourHeight * h) - labelBaselineAdjust)
+                ) {
+                    Text(
+                        text = h.toString().padStart(2, '0'),
+                        style = if (h in showBoldAt) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (h in showBoldAt) 0.90f else 0.70f),
+                        modifier = Modifier.padding(start = 10.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SegmentBg(
+    railWidth: Dp,
+    top: Dp,
+    height: Dp,
+    color: Color,
+    alpha: Float
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .offset(y = top)
+            .height(height)
+            .padding(start = railWidth, end = 12.dp)
+            .background(color.copy(alpha = alpha))
+    )
+}
+
+@Composable
+private fun TimelineSlotBlock(
+    modifier: Modifier = Modifier,
+    title: String,
+    timeText: String,
+    isTask: Boolean,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val barColor = if (isTask) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.80f)
+    } else {
+        MaterialTheme.colorScheme.secondary.copy(alpha = 0.80f)
+    }
+    val cardBg = if (isTask) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    }
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 2.dp,
+        color = cardBg
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(7.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(barColor)
+            )
+
+            Spacer(Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                Text(
+                    timeText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.70f)
+                )
+                Text(
+                    if (isTask) "任務" else "純行程",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f)
+                )
+            }
+
+            TextButton(onClick = onEdit) { Text("編輯") }
+            TextButton(onClick = onDelete) { Text("刪除") }
+        }
+    }
+}
+
+/* ---------------- Stats row (Sleep/Morning/Afternoon/Evening) ---------------- */
+
+@Composable
+private fun StatsRow4(stats: ScheduleRepository.ScheduleStats4x3) {
+
+    data class Entry(
+        val label: String,
+        val total: Long,
+        val task: Long,
+        val free: Long,
+        val color: Color
+    )
+
+    @Composable
+    fun bucketColor(label: String): Color = when (label) {
+        "睡" -> MaterialTheme.colorScheme.secondary
+        "早" -> MaterialTheme.colorScheme.primary
+        "中" -> MaterialTheme.colorScheme.tertiary
+        "晚" -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    val entries = listOf(
+        Entry("睡", stats.sleepTotal, stats.sleepTask, stats.sleepFree, bucketColor("睡")),
+        Entry("早", stats.morningTotal, stats.morningTask, stats.morningFree, bucketColor("早")),
+        Entry("中", stats.afternoonTotal, stats.afternoonTask, stats.afternoonFree, bucketColor("中")),
+        Entry("晚", stats.eveningTotal, stats.eveningTask, stats.eveningFree, bucketColor("晚")),
+    )
+
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        items(entries) { e ->
+            val bg = e.color.copy(alpha = 0.18f)
+
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                tonalElevation = 1.dp,
+                color = bg,
+                modifier = Modifier
+                    .width(85.dp)
+                    .height(56.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(e.label, style = MaterialTheme.typography.labelMedium)
+                        Text("${(e.total / 60_000)}", style = MaterialTheme.typography.titleSmall)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* ---------------- Month model + utils ---------------- */
 
 private data class DayCell(val millis: Long, val dayText: String)
 private data class MonthModel(val title: String, val cells: List<DayCell?>)
@@ -471,7 +826,6 @@ private fun buildMonthModel(anchorMillis: Long): MonthModel {
 
     val year = cal.get(Calendar.YEAR)
     val month = cal.get(Calendar.MONTH)
-
     val title = "${year}年${month + 1}月"
 
     val firstDayOfWeek = cal.get(Calendar.DAY_OF_WEEK) // 1=Sun..7=Sat
@@ -493,12 +847,33 @@ private fun buildMonthModel(anchorMillis: Long): MonthModel {
     return MonthModel(title = title, cells = cells)
 }
 
+private fun startOfDayMillis(millis: Long): Long {
+    val cal = Calendar.getInstance()
+    cal.timeInMillis = millis
+    cal.set(Calendar.HOUR_OF_DAY, 0)
+    cal.set(Calendar.MINUTE, 0)
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    return cal.timeInMillis
+}
+
+private fun minutesFromDayStart(day0: Long, timeMillis: Long): Int {
+    val diff = (timeMillis - day0).coerceIn(0L, 24L * 60L * 60_000L)
+    return (diff / 60_000L).toInt()
+}
+
 private fun dayKey(millis: Long): Int {
     val c = Calendar.getInstance().apply { timeInMillis = millis }
     return c.get(Calendar.YEAR) * 1000 + c.get(Calendar.DAY_OF_YEAR)
 }
 
 private fun isSameDayFast(a: Long, b: Long): Boolean = dayKey(a) == dayKey(b)
+
+private fun isSameMonthFast(a: Long, b: Long): Boolean {
+    val ca = Calendar.getInstance().apply { timeInMillis = a }
+    val cb = Calendar.getInstance().apply { timeInMillis = b }
+    return ca.get(Calendar.YEAR) == cb.get(Calendar.YEAR) && ca.get(Calendar.MONTH) == cb.get(Calendar.MONTH)
+}
 
 private fun formatYmd(millis: Long): String {
     val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.TAIWAN)
@@ -509,6 +884,8 @@ private fun formatHm(millis: Long): String {
     val sdf = SimpleDateFormat("HH:mm", Locale.TAIWAN)
     return sdf.format(Date(millis))
 }
+
+/* ---------------- Slot dialogs ---------------- */
 
 @Composable
 private fun SlotDialogs(
@@ -523,11 +900,10 @@ private fun SlotDialogs(
         is ScheduleViewModel.SlotDialogState.Editing -> {
             val d = dialogState.draft
             val date0 = d.dateMillis
-            val step: Int? = 30 // ✅ 保留 30 分鐘步進
+            val step: Int? = 30
 
             fun hmToDigits(millis: Long): String = formatHm(millis).replace(":", "")
 
-            // ✅ 用 TextFieldValue 才能穩定控制游標/輸入（避免 1103 問題）
             var start by remember(d.startTimeMillis) {
                 val digits = hmToDigits(d.startTimeMillis)
                 mutableStateOf(TextFieldValue(text = digits, selection = TextRange(digits.length)))
@@ -539,10 +915,7 @@ private fun SlotDialogs(
 
             fun digitsOnly(tfv: TextFieldValue): TextFieldValue {
                 val digits = tfv.text.filter { it.isDigit() }.take(4)
-                return TextFieldValue(
-                    text = digits,
-                    selection = TextRange(digits.length) // 游標永遠在末端，避免插入到中間
-                )
+                return TextFieldValue(text = digits, selection = TextRange(digits.length))
             }
 
             val startOff = TimeInput.digitsToOffsetMillis(start.text, allowStepMinutes = step)
@@ -579,7 +952,6 @@ private fun SlotDialogs(
 
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
 
-                            // --- 開始時間：digits存放 + 視覺轉換顯示HH:mm ---
                             OutlinedTextField(
                                 value = start,
                                 onValueChange = { input ->
@@ -591,15 +963,11 @@ private fun SlotDialogs(
                                         val newStart = TimeOptions.absoluteMillis(date0, off)
                                         onUpdateDraft { it.copy(startTimeMillis = newStart) }
 
-                                        // end 不合法/早於 start -> 自動推 +1hr（仍符合 30 分步進）
                                         val endParsed = TimeInput.digitsToOffsetMillis(end.text, allowStepMinutes = step)
                                         if (endParsed == null || endParsed <= off) {
                                             val suggested = off + 60L * 60_000L
                                             val suggestedDigits = TimeOptions.offsetToLabel(suggested).replace(":", "")
-                                            end = TextFieldValue(
-                                                text = suggestedDigits,
-                                                selection = TextRange(suggestedDigits.length)
-                                            )
+                                            end = TextFieldValue(text = suggestedDigits, selection = TextRange(suggestedDigits.length))
                                             val newEnd = TimeOptions.absoluteMillis(date0, suggested)
                                             onUpdateDraft { it.copy(endTimeMillis = newEnd) }
                                         }
@@ -612,7 +980,6 @@ private fun SlotDialogs(
                                 modifier = Modifier.weight(1f)
                             )
 
-                            // --- 結束時間 ---
                             OutlinedTextField(
                                 value = end,
                                 onValueChange = { input ->
@@ -648,10 +1015,7 @@ private fun SlotDialogs(
                     }
                 },
                 confirmButton = {
-                    Button(
-                        onClick = onSave,
-                        enabled = timeError == null
-                    ) { Text("儲存") }
+                    Button(onClick = onSave, enabled = timeError == null) { Text("儲存") }
                 },
                 dismissButton = {
                     TextButton(onClick = onDismiss) { Text("取消") }
@@ -677,13 +1041,9 @@ private fun SlotDialogs(
     }
 }
 
-/**
- * 將純數字 digits（例如 "1130"）顯示成 "11:30"
- * TextField 內部仍維持 digits，避免 IME 亂序。
- */
 private object HhmmVisualTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
-        val raw = text.text // digits only
+        val raw = text.text
         val out = buildString {
             raw.forEachIndexed { i, c ->
                 if (i == 2) append(':')
@@ -692,24 +1052,20 @@ private object HhmmVisualTransformation : VisualTransformation {
         }
 
         val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int {
-                // digits -> with colon after 2 digits
-                return when {
-                    offset <= 2 -> offset
-                    else -> offset + 1
-                }
-            }
+            override fun originalToTransformed(offset: Int): Int =
+                if (offset <= 2) offset else offset + 1
 
-            override fun transformedToOriginal(offset: Int): Int {
-                // with colon -> digits
-                return when {
+            override fun transformedToOriginal(offset: Int): Int =
+                when {
                     offset <= 2 -> offset
                     offset == 3 -> 2
                     else -> offset - 1
                 }
-            }
         }
 
         return TransformedText(AnnotatedString(out), offsetMapping)
     }
 }
+
+private const val DAY_MS = 24L * 60L * 60L * 1000L
+private const val WEEK_MS = 7L * DAY_MS

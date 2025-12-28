@@ -63,6 +63,8 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     implementation(libs.androidx.ui)
     implementation(libs.androidx.compose.foundation.layout)
+    implementation(libs.androidx.material3)
+    implementation(libs.androidx.compose.ui.unit)
     kapt("androidx.room:room-compiler:2.6.1")
 
     // Retrofit + OkHttp + Moshi

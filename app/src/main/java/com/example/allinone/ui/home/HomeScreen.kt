@@ -42,7 +42,8 @@ fun HomeScreen(
             modifier = Modifier
                 .padding(innerPadding)
                 .fillMaxSize()
-                .padding(horizontal = 20.dp)
+                // Reduce top/side whitespace to match other pages
+                .padding(horizontal = 12.dp)
         ) {
             // 1. 問候語
             Text(
@@ -86,7 +87,7 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // 3. 今日事件摘要 (優化：提升行動導向價值)
             Card(
@@ -95,7 +96,7 @@ fun HomeScreen(
                 shape = RoundedCornerShape(24.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier.padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val today by viewModel.todayTodoCount.collectAsState()
@@ -117,7 +118,7 @@ fun HomeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // 4. PARA 模組入口 (優化：加入 Icon 與計數，更具利用性)
             Text("知識管理 (PARA)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)

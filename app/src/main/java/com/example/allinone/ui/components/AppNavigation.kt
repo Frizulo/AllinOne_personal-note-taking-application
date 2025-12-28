@@ -1,6 +1,8 @@
 package com.example.allinone.ui.components
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -8,8 +10,10 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Task
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.example.allinone.Screen
 import com.example.allinone.ui.theme.AppTheme
 
@@ -31,7 +35,12 @@ fun AllInOneBottomBar(
         NavItem("Saved", Icons.Default.Bookmark, "saved")
     )
 
+    // In real devices, NavigationBar applies navigationBars insets by default, which can look like
+    // an extra blank strip above the bar even if Preview looks fine. We disable the default insets
+    // and control the bar height ourselves.
     NavigationBar(
+        modifier = androidx.compose.ui.Modifier.height(80.dp).padding(top = 0.dp, bottom = 24.dp),
+        windowInsets = WindowInsets(0),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = NavigationBarDefaults.Elevation
     ) {

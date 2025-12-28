@@ -7,39 +7,57 @@ import com.example.allinone.data.local.entities.ScheduleSlotEntity
 import com.example.allinone.data.local.entities.TaskEntity
 import com.example.allinone.data.repo.SaveSlotResult
 import com.example.allinone.data.repo.ScheduleRepository
-import com.example.allinone.data.repo.ScheduleStats3x3
 import com.example.allinone.data.repo.TasksRepository
 import com.example.allinone.data.store.TokenStore
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.util.Calendar
 
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 class ScheduleViewModel(
     private val tasksRepo: TasksRepository,
     private val scheduleRepo: ScheduleRepository,
-    tokenStore: TokenStore
+    private val tokenStore: TokenStore
 ) : ViewModel() {
 
     // -------------------------
-    // Calendar state
+    // 月曆 + 當日任務
     // -------------------------
 
-    // ✅ 一開始就用「今天 00:00」避免狀態亂跳
-    private val _selectedDayMillis = MutableStateFlow(startOfDay(System.currentTimeMillis()))
+    /** 選擇的日期（允許帶時間，但查詢時會 normalize 到 00:00） */
+    private val _selectedDayMillis = MutableStateFlow(System.currentTimeMillis())
     val selectedDayMillis: StateFlow<Long> = _selectedDayMillis.asStateFlow()
 
-    private val _monthAnchorMillis = MutableStateFlow(startOfMonth(System.currentTimeMillis()))
+    /** 月份錨點（用來建月曆） */
+    private val _monthAnchorMillis = MutableStateFlow(System.currentTimeMillis())
     val monthAnchorMillis: StateFlow<Long> = _monthAnchorMillis.asStateFlow()
 
+    /** 當天任務（用 dueTimeMillis 落在當天範圍內） */
+    val tasksOfSelectedDay: StateFlow<List<TaskEntity>> =
+        _selectedDayMillis
+            .flatMapLatest { day -> tasksRepo.observeTasksForDay(day) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     fun selectDay(millis: Long) {
-        _selectedDayMillis.value = startOfDay(millis)
+        _selectedDayMillis.value = millis
     }
 
     fun setMonthAnchor(millis: Long) {
-        _monthAnchorMillis.value = startOfMonth(millis)
+        _monthAnchorMillis.value = millis
     }
 
     fun gotoPrevMonth() {
@@ -59,33 +77,7 @@ class ScheduleViewModel(
     }
 
     // -------------------------
-    // uid state（避免每次 first()）
-    // -------------------------
-
-    // ✅ uid 變成 StateFlow，隨時可取，不要 first()
-    private val uidState: StateFlow<Long?> =
-        tokenStore.uidFlow
-            .distinctUntilChanged()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    private fun requireUidOrNull(): Long? = uidState.value
-
-    // -------------------------
-    // Tasks of day
-    // -------------------------
-
-    val tasksOfSelectedDay: StateFlow<List<TaskEntity>> =
-        combine(uidState, _selectedDayMillis) { uid, day0 ->
-            uid to day0
-        }
-            .flatMapLatest { (uid, day0) ->
-                if (uid == null) flowOf(emptyList())
-                else tasksRepo.observeTasksForDay(day0) // repo 內部已 peekUid/或 DAO 帶 uid（你目前版本OK）
-            }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    // -------------------------
-    // Mode
+    // Timeline / Slot
     // -------------------------
 
     enum class Mode { Tasks, Timeline }
@@ -93,41 +85,38 @@ class ScheduleViewModel(
     val mode: StateFlow<Mode> = _mode.asStateFlow()
     fun setMode(m: Mode) { _mode.value = m }
 
-    // -------------------------
-    // Slots + Stats
-    // -------------------------
+    /** uid（多帳號隔離） */
+    private val uidFlow: Flow<Long> =
+        tokenStore.uidFlow
+            .filterNotNull()
+            .distinctUntilChanged()
 
+    /** 當天 slots（Timeline View 使用） */
     val slotsWithTask: StateFlow<List<ScheduleSlotWithTask>> =
-        combine(uidState, _selectedDayMillis) { uid, day0 ->
-            uid to day0 // day0 已是 00:00
+        combine(uidFlow, _selectedDayMillis) { uid, day ->
+            uid to normalizeToStartOfDay(day)
         }
             .flatMapLatest { (uid, date0) ->
-                if (uid == null) flowOf(emptyList())
-                else scheduleRepo.observeSlotsWithTask(uid, date0)
+                scheduleRepo.observeSlotsWithTask(uid, date0)
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    // ✅ 重點：統計計算丟到 Default，避免卡 Main 導致 ANR
-    val stats3x3: StateFlow<ScheduleStats3x3> =
-        slotsWithTask
-            .mapLatest { slots ->
-                withContext(Dispatchers.Default) {
-                    scheduleRepo.calculate3x3Stats(_selectedDayMillis.value, slots)
-                }
-            }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ScheduleStats3x3())
+    /** ✅ 4x3 統計（睡/早/中/晚）×（Total/Task/Free） */
+    val stats4x3: StateFlow<ScheduleRepository.ScheduleStats4x3> =
+        combine(_selectedDayMillis, slotsWithTask) { day, slots ->
+            scheduleRepo.calculate4x3Stats(normalizeToStartOfDay(day), slots)
+        }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5_000),
+                ScheduleRepository.ScheduleStats4x3()
+            )
 
-    // -------------------------
-    // UI message
-    // -------------------------
-
+    // Snackbar / Toast 訊息
     private val _message = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val message: SharedFlow<String> = _message.asSharedFlow()
 
-    // -------------------------
-    // Dialog state
-    // -------------------------
-
+    // Dialog 狀態（新增/編輯/衝突）
     sealed class SlotDialogState {
         data object Hidden : SlotDialogState()
         data class Editing(val isNew: Boolean, val draft: SlotDraft) : SlotDialogState()
@@ -164,46 +153,43 @@ class ScheduleViewModel(
     }
 
     fun updateDraft(transform: (SlotDraft) -> SlotDraft) {
-        val cur = _slotDialog.value
-        _slotDialog.value = when (cur) {
-            is SlotDialogState.Editing -> cur.copy(draft = transform(cur.draft))
-            is SlotDialogState.Conflict -> cur.copy(draft = transform(cur.draft))
-            SlotDialogState.Hidden -> cur
+        when (val cur = _slotDialog.value) {
+            is SlotDialogState.Editing -> _slotDialog.value = cur.copy(draft = transform(cur.draft))
+            is SlotDialogState.Conflict -> _slotDialog.value = cur.copy(draft = transform(cur.draft))
+            SlotDialogState.Hidden -> Unit
         }
     }
 
     fun openCreateFreeSlotDialog() {
-        val uid = requireUidOrNull() ?: run {
-            _message.tryEmit("尚未登入")
-            return
-        }
-        val date0 = _selectedDayMillis.value
-        val start = date0 + 8L * HOUR_MS
-        val end = start + 60L * MIN_MS
+        viewModelScope.launch {
+            val uid = uidFlow.first()
+            val date0 = normalizeToStartOfDay(_selectedDayMillis.value)
 
-        _slotDialog.value = SlotDialogState.Editing(
-            isNew = true,
-            draft = SlotDraft(
-                ownerUid = uid,
-                dateMillis = date0,
-                startTimeMillis = start,
-                endTimeMillis = end
+            // 預設 08:00-09:00
+            val start = date0 + 8L * HOUR_MS
+            val end = start + 60L * MIN_MS
+
+            _slotDialog.value = SlotDialogState.Editing(
+                isNew = true,
+                draft = SlotDraft(
+                    ownerUid = uid,
+                    dateMillis = date0,
+                    startTimeMillis = start,
+                    endTimeMillis = end,
+                    localTaskId = null,
+                    customTitle = "",
+                    note = ""
+                )
             )
-        )
+        }
     }
 
     fun openCreateTaskSlotDialog(taskLocalId: String, taskTitleHint: String? = null) {
-        val uid = requireUidOrNull() ?: run {
-            _message.tryEmit("尚未登入")
-            return
-        }
-        val date0 = _selectedDayMillis.value
-
         viewModelScope.launch {
-            // ✅ 可能會掃當天 slots，丟到 IO/Default 比較安全
-            val gap = withContext(Dispatchers.Default) {
-                scheduleRepo.findFirstFreeGapOneHour(uid, date0)
-            }
+            val uid = uidFlow.first()
+            val date0 = normalizeToStartOfDay(_selectedDayMillis.value)
+
+            val gap = scheduleRepo.findFirstFreeGapOneHour(uid, date0)
             val start = gap?.first ?: (date0 + 8L * HOUR_MS)
             val end = gap?.second ?: (start + 60L * MIN_MS)
 
@@ -215,7 +201,8 @@ class ScheduleViewModel(
                     startTimeMillis = start,
                     endTimeMillis = end,
                     localTaskId = taskLocalId,
-                    customTitle = taskTitleHint ?: ""
+                    customTitle = taskTitleHint ?: "",
+                    note = ""
                 )
             )
         }
@@ -246,27 +233,25 @@ class ScheduleViewModel(
         }
 
         viewModelScope.launch {
-            val res = withContext(Dispatchers.IO) {
-                scheduleRepo.saveSlot(draft.toEntity())
-            }
-            when (res) {
+            when (val res = scheduleRepo.saveSlot(draft.toEntity())) {
                 is SaveSlotResult.Success -> {
                     _message.tryEmit("已儲存排程")
                     _slotDialog.value = SlotDialogState.Hidden
                 }
-                is SaveSlotResult.Error -> _message.tryEmit(res.message)
-                is SaveSlotResult.Conflict -> _slotDialog.value =
-                    SlotDialogState.Conflict(draft, res.conflictSlot)
+                is SaveSlotResult.Error -> {
+                    _message.tryEmit(res.message)
+                }
+                is SaveSlotResult.Conflict -> {
+                    // ✅ 讓你可以回去編輯：保留 draft，顯示衝突資訊
+                    _slotDialog.value = SlotDialogState.Conflict(draft, res.conflictSlot)
+                }
             }
         }
     }
 
     fun deleteSlot(slotId: Long) {
-        val uid = requireUidOrNull() ?: run {
-            _message.tryEmit("尚未登入")
-            return
-        }
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
+            val uid = uidFlow.first()
             scheduleRepo.softDeleteSlot(uid, slotId)
             _message.tryEmit("已刪除時段")
         }
@@ -276,31 +261,19 @@ class ScheduleViewModel(
     // Helpers
     // -------------------------
 
+    private fun normalizeToStartOfDay(millis: Long): Long {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
+
     companion object {
         private const val MIN_MS = 60_000L
         private const val HOUR_MS = 3_600_000L
     }
-}
-
-private fun startOfDay(millis: Long): Long {
-    val cal = Calendar.getInstance().apply {
-        timeInMillis = millis
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }
-    return cal.timeInMillis
-}
-
-private fun startOfMonth(millis: Long): Long {
-    val cal = Calendar.getInstance().apply {
-        timeInMillis = millis
-        set(Calendar.DAY_OF_MONTH, 1)
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }
-    return cal.timeInMillis
 }
