@@ -9,6 +9,7 @@ import com.example.allinone.data.repo.SaveSlotResult
 import com.example.allinone.data.repo.ScheduleRepository
 import com.example.allinone.data.repo.TasksRepository
 import com.example.allinone.data.store.TokenStore
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -23,8 +24,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -104,8 +107,13 @@ class ScheduleViewModel(
     /** ✅ 4x3 統計（睡/早/中/晚）×（Total/Task/Free） */
     val stats4x3: StateFlow<ScheduleRepository.ScheduleStats4x3> =
         combine(_selectedDayMillis, slotsWithTask) { day, slots ->
-            scheduleRepo.calculate4x3Stats(normalizeToStartOfDay(day), slots)
+            day to slots
         }
+            .mapLatest { (day, slots) ->
+                withContext(Dispatchers.Default) {
+                    scheduleRepo.calculate4x3Stats(day, slots)
+                }
+            }
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5_000),

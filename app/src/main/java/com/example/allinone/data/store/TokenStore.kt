@@ -3,9 +3,13 @@ package com.example.allinone.data.store
 import android.content.Context
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 private val Context.dataStore by preferencesDataStore(name = "token_store")
@@ -27,10 +31,17 @@ class TokenStore(private val context: Context) {
     @Volatile
     private var cachedUid: Long? = null
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     init {
-        // ✅ App 啟動時先 preload 一次 uid 進 cache（只做一次）
-        cachedUid = runBlocking { uidFlow.first() }
+        scope.launch {
+            uidFlow.collect { uid ->
+                cachedUid = uid
+            }
+        }
     }
+
+    fun peekUserUid(): Long? = cachedUid
     suspend fun saveLogin(token: String, uid: Long, name: String) {
         context.dataStore.edit {
             it[KEY_TOKEN] = token
@@ -61,6 +72,4 @@ class TokenStore(private val context: Context) {
     fun getTokenBlocking(): String? = runBlocking { getToken() }
     fun getLastSyncBlocking(): String? = runBlocking { getLastSyncIso() }
 
-    // ✅ 新增：Repository 專用（非 suspend）
-    fun peekUserUid(): Long? = cachedUid
 }

@@ -97,7 +97,14 @@ fun ScheduleScreen(
     }
 
     val monthModel = remember(monthAnchor) { buildMonthModel(monthAnchor) }
-    val weekMonthModel = remember(selectedDay) { buildMonthModel(selectedDay) }
+    val weekTitle = remember(selectedDay) {
+        val cal = Calendar.getInstance().apply {
+            timeInMillis = selectedDay
+            set(Calendar.DAY_OF_MONTH, 1)
+        }
+        "${cal.get(Calendar.YEAR)}年${cal.get(Calendar.MONTH) + 1}月"
+    }
+
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -110,7 +117,7 @@ fun ScheduleScreen(
                 .padding(12.dp)
         ) {
             CalendarHeader(
-                title = if (isCalendarExpanded) monthModel.title else weekMonthModel.title,
+                title = if (isCalendarExpanded) monthModel.title else weekTitle,
                 expanded = isCalendarExpanded,
                 onPrev = {
                     throttled {
@@ -836,10 +843,12 @@ private fun buildMonthModel(anchorMillis: Long): MonthModel {
     repeat(leadingBlanks) { cells.add(null) }
 
     for (d in 1..daysInMonth) {
-        val c = Calendar.getInstance()
-        c.set(year, month, d, 0, 0, 0)
-        c.set(Calendar.MILLISECOND, 0)
-        cells.add(DayCell(millis = c.timeInMillis, dayText = d.toString()))
+        cal.set(Calendar.DAY_OF_MONTH, d)
+        cal.set(Calendar.HOUR_OF_DAY, 0)
+        cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+        cells.add(DayCell(millis = cal.timeInMillis, dayText = d.toString()))
     }
 
     while (cells.size % 7 != 0) cells.add(null)
