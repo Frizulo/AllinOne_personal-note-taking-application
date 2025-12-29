@@ -44,7 +44,7 @@ fun AllInOneBottomBar(
     // an extra blank strip above the bar even if Preview looks fine. We disable the default insets
     // and control the bar height ourselves.
     NavigationBar(
-        modifier = androidx.compose.ui.Modifier.height(80.dp).padding(top = 0.dp, bottom = 24.dp),
+        modifier = androidx.compose.ui.Modifier.height(90.dp).padding(top = 0.dp, bottom = 24.dp),
         windowInsets = WindowInsets(0),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = NavigationBarDefaults.Elevation

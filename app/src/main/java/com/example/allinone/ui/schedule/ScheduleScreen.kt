@@ -551,7 +551,7 @@ private fun TimelinePanel(
             Column(modifier = Modifier.weight(1f)) {
                 Text("時間管理（${formatYmd(day0)}）", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "統計：分鐘(任務/純行程)",
+                    "統計單位：分鐘",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
                 )

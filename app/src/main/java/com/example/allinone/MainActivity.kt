@@ -7,13 +7,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -43,6 +43,8 @@ import com.example.allinone.ui.tasks.TasksScreen
 import com.example.allinone.ui.tasks.TasksViewModel
 import com.example.allinone.ui.theme.AppTheme
 import com.example.allinone.worker.SyncWorker
+import kotlinx.coroutines.launch
+
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -64,6 +66,9 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot() {
     val context = LocalContext.current
     val nav = rememberNavController()
+
+    val scope = rememberCoroutineScope()
+    val tokenStore = remember { ServiceLocator.tokenStore(context) }
 
     val authVm = remember { AuthViewModel(ServiceLocator.authRepository(context)) }
     val tasksVm = remember { TasksViewModel(ServiceLocator.tasksRepository(context)) }
@@ -152,8 +157,24 @@ private fun AppRoot() {
 
             composable(Screen.Home.route) {
                 val username by authVm.username.collectAsState()
-                HomeScreen(username = username, homeVm)
+                HomeScreen(
+                    username = username,
+                    viewModel = homeVm,
+                    onLogout = {
+                        scope.launch {
+                            // 清除 token / uid / name
+                            tokenStore.clear()
+
+                            // 回到登入流程
+                            nav.navigate("landing") {
+                                popUpTo(0) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                )
             }
+
 
             composable(Screen.Tasks.route) {
                 TasksScreen(viewModel = tasksVm)
