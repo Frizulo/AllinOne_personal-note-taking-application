@@ -28,6 +28,8 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.allinone.di.ServiceLocator
+import com.example.allinone.ui.analysis.AnalysisScreen
+import com.example.allinone.ui.analysis.AnalysisViewModel
 import com.example.allinone.ui.auth.AuthViewModel
 import com.example.allinone.ui.auth.LandingScreen
 import com.example.allinone.ui.auth.LoginScreen
@@ -73,6 +75,12 @@ private fun AppRoot() {
             tokenStore = ServiceLocator.tokenStore(context)
         )
     }
+    val analysisVm = remember {
+        AnalysisViewModel(
+            scheduleRepo = ServiceLocator.scheduleRepository(context),
+            tokenStore = ServiceLocator.tokenStore(context)
+        )
+    }
 
     val backStackEntry by nav.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
@@ -82,7 +90,7 @@ private fun AppRoot() {
         Screen.Home.route,
         Screen.Tasks.route,
         Screen.Schedule.route,
-        Screen.Saved.route
+        Screen.Analysis.route
     )
 
     Scaffold(
@@ -155,9 +163,8 @@ private fun AppRoot() {
             composable(Screen.Schedule.route) {
                 ScheduleScreen(scheduleVm)
             }
-            composable(Screen.Saved.route) {
-                val username by authVm.username.collectAsState()
-                HomeScreen(username = username, homeVm)
+            composable(Screen.Analysis.route) {
+                AnalysisScreen(analysisVm)
             }
         }
     }
