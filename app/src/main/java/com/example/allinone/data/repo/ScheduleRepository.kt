@@ -1,15 +1,27 @@
 package com.example.allinone.data.repo
 
+import android.content.ContentValues.TAG
+import android.os.Build
+import android.util.Log
+import androidx.annotation.RequiresApi
 import com.example.allinone.data.local.ScheduleDao
 import com.example.allinone.data.local.ScheduleSlotWithTask
 import com.example.allinone.data.local.entities.ScheduleSlotEntity
+import com.example.allinone.data.mapper.parseServerTimeToMillis
+import com.example.allinone.data.mapper.toEntity
+import com.example.allinone.data.mapper.toSchedulePushItem
+import com.example.allinone.data.remote.AllInOneApi
+import com.example.allinone.data.remote.dto.ScheduleSyncPushRequest
+import com.example.allinone.data.store.TokenStore
 import kotlinx.coroutines.flow.Flow
 import java.util.Calendar
 import kotlin.math.max
 import kotlin.math.min
 
 class ScheduleRepository(
-    private val scheduleDao: ScheduleDao
+    private val scheduleDao: ScheduleDao,
+    private val api: AllInOneApi,
+    private val tokenStore: TokenStore
 ) {
 
     fun observeSlotsWithTask(uid: Long, dateMillis: Long): Flow<List<ScheduleSlotWithTask>> {
@@ -94,10 +106,23 @@ class ScheduleRepository(
         }
 
         // 6) insert / update
+        val pendingState = when {
+            finalSlot.slotId == 0L -> 1 // PendingCreate
+            finalSlot.serverSlotId == null -> 1 // 還沒上傳過，一律視為 create
+            else -> 2 // PendingUpdate
+        }
+
         if (finalSlot.slotId == 0L) {
-            scheduleDao.insert(finalSlot.copy(createdTimeMillis = now))
+            scheduleDao.insert(
+                finalSlot.copy(
+                    createdTimeMillis = now,
+                    syncState = pendingState
+                )
+            )
         } else {
-            scheduleDao.update(finalSlot)
+            scheduleDao.update(
+                finalSlot.copy(syncState = pendingState)
+            )
         }
 
         return SaveSlotResult.Success
@@ -294,6 +319,84 @@ class ScheduleRepository(
         private const val HOUR_MS = 3_600_000L
         private const val DAY_MS = 86_400_000L
     }
+
+    // --------------------
+    // Sync
+    // --------------------
+    @RequiresApi(Build.VERSION_CODES.O)
+    suspend fun pushPending() {
+        val uid = tokenStore.getUserUid() ?: error("not logged in")
+        val pending = scheduleDao.getPending(uid)
+        if (pending.isEmpty()) return
+
+        val items = pending.map { slot ->
+            val op = when (slot.syncState) {
+                1 -> "create"
+                2 -> "update"
+                3 -> "delete"
+                else -> "update"
+            }
+            slot.toSchedulePushItem(op)
+        }
+
+        val resp = api.pushScheduleChanges(ScheduleSyncPushRequest(items))
+
+        // 回填 serverSlotId / updatedTime，並清掉 pending
+        for (r in resp.results) {
+            val local = scheduleDao.findBySlotId(r.clientSlotId) ?: continue
+
+            if (local.syncState == 3 || r.deleted) {
+                // 已刪除：你可以 hard delete（可選）
+                // scheduleDao.hardDeleteById(...)  (如果你想做 hard delete 就要再加 Dao)
+                scheduleDao.upsert(
+                    local.copy(
+                        deletedTimeMillis = local.deletedTimeMillis ?: System.currentTimeMillis(),
+                        syncState = 0,
+                        updatedTimeMillis = System.currentTimeMillis()
+                    )
+                )
+            } else {
+                scheduleDao.upsert(
+                    local.copy(
+                        serverSlotId = r.serverSlotId ?: local.serverSlotId,
+                        syncState = 0,
+                        updatedTimeMillis = parseServerTimeToMillis(r.updatedTime)
+                    )
+                )
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    suspend fun pullIncremental(since: String): String {
+        val resp = api.pullScheduleChanges(since)
+
+        for (dto in resp.items) {
+            val existing = scheduleDao.findByServerSlotId(dto.serverSlotId)
+            if (dto.deletedTime != null) {
+                // server 說刪了：本地 soft delete 或 hard delete（二選一）
+                existing?.let {
+                    scheduleDao.upsert(
+                        it.copy(
+                            deletedTimeMillis = dto.deletedTime?.let(::parseServerTimeToMillis) ?: System.currentTimeMillis(),
+                            syncState = 0,
+                            updatedTimeMillis = System.currentTimeMillis()
+                        )
+                    )
+                }
+                continue
+            }
+
+            val entity = dto.toEntity(existingLocalId = existing?.slotId)
+            // 如果原本有 local slotId，就保留 slotId（toEntity 會依 existingLocalId 決定）
+            scheduleDao.upsert(
+                if (existing != null) entity.copy(slotId = existing.slotId) else entity
+            )
+        }
+
+        return resp.serverTime
+    }
+
 }
 
 // --------------------

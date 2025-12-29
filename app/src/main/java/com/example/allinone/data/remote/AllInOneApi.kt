@@ -19,4 +19,10 @@ interface AllInOneApi {
 
     @POST("sync/push")
     suspend fun pushChanges(@Body body: PushRequest): PushResponse
+
+    @GET("schedule/sync/pull")
+    suspend fun pullScheduleChanges(@Query("since") since: String): ScheduleSyncPullResponse
+
+    @POST("schedule/sync/push")
+    suspend fun pushScheduleChanges(@Body body: ScheduleSyncPushRequest): ScheduleSyncPushResponse
 }

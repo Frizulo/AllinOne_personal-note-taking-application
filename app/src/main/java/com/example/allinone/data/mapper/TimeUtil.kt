@@ -28,6 +28,12 @@ fun parseServerTimeToMillis(raw: String): Long {
         System.currentTimeMillis()
     }
 }
+@RequiresApi(Build.VERSION_CODES.O)
+private const val TAIPEI_OFFSET_MS = 8 * 60 * 60 * 1000L
+
+fun utcMillisFixToTaipeiMillis(utcMillis: Long): Long {
+    return utcMillis + TAIPEI_OFFSET_MS
+}
 
 @RequiresApi(Build.VERSION_CODES.O)
 fun millisToServerIso(millis: Long): String =

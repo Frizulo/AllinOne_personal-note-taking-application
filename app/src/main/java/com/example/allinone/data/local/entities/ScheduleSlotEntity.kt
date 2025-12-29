@@ -30,7 +30,7 @@ data class ScheduleSlotEntity(
     val note: String? = null,
 
     // 未來雲端預留（本版可先不用）
-    val serverSlotId: String? = null,
+    val serverSlotId: Long? = null,
     val syncState: Int = 0, // 0=Synced, 1=PendingCreate, 2=PendingUpdate, 3=PendingDelete
 
     val createdTimeMillis: Long = System.currentTimeMillis(),

@@ -17,7 +17,25 @@ class SyncWorker(
     override suspend fun doWork(): Result {
         Log.d("SyncWorker", "SyncWorker START")
         return runCatching {
-            ServiceLocator.tasksRepository(applicationContext).syncOnce()
+            val ts = ServiceLocator.tokenStore(applicationContext)
+            val since = ts.getLastSyncIso() ?: "1970-01-01T00:00:00Z"
+
+            val tasksRepo = ServiceLocator.tasksRepository(applicationContext)
+            val scheduleRepo = ServiceLocator.scheduleRepository(applicationContext)
+
+            // 先 push（順序通常無所謂，但建議都先 push）
+            tasksRepo.pushPending()
+            scheduleRepo.pushPending()
+
+            // 再用同一個 since pull（避免漏拉）
+            val t1 = tasksRepo.pullIncrementalSince(since)
+            val t2 = scheduleRepo.pullIncremental(since)
+
+            // 最後更新 lastSync = 兩者 serverTime 較新的那個
+            val m1 = com.example.allinone.data.mapper.parseServerTimeToMillis(t1)
+            val m2 = com.example.allinone.data.mapper.parseServerTimeToMillis(t2)
+            ts.setLastSyncIso(if (m1 >= m2) t1 else t2)
+
         }.fold(
             onSuccess = { Result.success() },
             onFailure = { Result.retry() }
