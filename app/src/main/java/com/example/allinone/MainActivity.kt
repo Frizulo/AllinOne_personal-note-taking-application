@@ -81,7 +81,6 @@ private fun AppRoot() {
     val scope = rememberCoroutineScope()
     val tokenStore = remember { ServiceLocator.tokenStore(context) }
 
-    val authVm = remember { AuthViewModel(ServiceLocator.authRepository(context)) }
     val tasksVm = remember { TasksViewModel(ServiceLocator.tasksRepository(context)) }
     val homeVm = remember { HomeViewModel(ServiceLocator.tasksRepository(context),ServiceLocator.weatherRepository(context)) }
     val scheduleVm = remember {
