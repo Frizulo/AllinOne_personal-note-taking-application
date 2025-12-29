@@ -147,9 +147,9 @@ fun HomeScreen(
                     container = MaterialTheme.colorScheme.secondaryContainer
                 )
                 MiniStatCard(
-                    title = "統計所有未完成任務",
+                    title = "統計代辦",
                     value = "$active 筆",
-                    subtitle = "不含 done",
+                    subtitle = "未完成任務",
                     icon = Icons.AutoMirrored.Filled.Assignment,
                     modifier = Modifier.weight(1f),
                     container = MaterialTheme.colorScheme.tertiaryContainer
