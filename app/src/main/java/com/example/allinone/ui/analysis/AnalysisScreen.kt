@@ -47,7 +47,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.allinone.data.local.ScheduleSlotWithTask
@@ -59,6 +58,7 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+
 
 @Composable
 fun AnalysisScreen(
@@ -75,238 +75,298 @@ fun AnalysisScreen(
 
     LaunchedEffect(Unit) { vm.runSearch() }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp, 32.dp)
-    ) {
-
-        Text("數據報表 / 查詢", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(12.dp))
-
-        // -------------------------
-        // Filters (✅獨立底色)
-        // -------------------------
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp, 48.dp)
         ) {
-            Column(Modifier.padding(14.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("篩選條件", style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = vm::clearFilters) { Text("清空") }
-                    Button(onClick = vm::runSearch) { Text("查詢") }
-                }
 
-                Spacer(Modifier.height(10.dp))
+            Text("數據報表 / 查詢", style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(12.dp))
 
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    DateBox(
-                        modifier = Modifier.weight(1f),
-                        label = "開始日期",
-                        dayMillis = startDay,
-                        onPick = { vm.setStartDay(it) },
-                        onClear = { vm.setStartDay(null) }
-                    )
-                    DateBox(
-                        modifier = Modifier.weight(1f),
-                        label = "結束日期",
-                        dayMillis = endDay,
-                        onPick = { vm.setEndDay(it) },
-                        onClear = { vm.setEndDay(null) }
-                    )
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                OutlinedTextField(
-                    value = keyword,
-                    onValueChange = vm::setKeyword,
-                    singleLine = true,
-                    label = { Text("篩選標題 + 內容 (關鍵字)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(10.dp))
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = includeTask, onCheckedChange = vm::setIncludeTask)
-                        Text("顯示 Task")
+            // -------------------------
+            // Filters (✅獨立底色)
+            // -------------------------
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("篩選條件", style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = vm::clearFilters) { Text("清空") }
+                        Button(onClick = vm::runSearch) { Text("查詢") }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = includeFree, onCheckedChange = vm::setIncludeFree)
-                        Text("顯示 純行程")
-                    }
-                }
-
-                if (ui.error != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(ui.error!!, color = MaterialTheme.colorScheme.error)
-                }
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // -------------------------
-        // Dashboard
-        // -------------------------
-        val summary = ui.summary
-        val totalH = msToHours(summary.totalMs)
-        val taskH = msToHours(summary.taskMs)
-        val freeH = msToHours(summary.freeMs)
-        val focusDensity = if (summary.totalMs <= 0L) 0f else (summary.taskMs.toFloat() / summary.totalMs.toFloat())
-
-        // ✅總累計時長更突出：primaryContainer + 大字
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            MetricCardEmphasis(
-                title = "總累計時長",
-                value = fmtHours(totalH),
-                modifier = Modifier.weight(3f)
-            )
-            MetricCard(
-                title = "Task 佔比（專注度）",
-                value = "${(focusDensity * 100).toInt()}%",
-                modifier = Modifier.weight(2f),
-                container = MaterialTheme.colorScheme.surfaceVariant
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            MetricCard("Task 小時", fmtHours(taskH), Modifier.weight(1f), MaterialTheme.colorScheme.surfaceVariant)
-            MetricCard("純行程 小時", fmtHours(freeH), Modifier.weight(1f), MaterialTheme.colorScheme.surfaceVariant)
-        }
-
-        Text(
-            text = "「Task 佔比」＝ Task 時間 ÷ 總時間，用來看你有多少時間花在可交付的任務上。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(Modifier.height(14.dp))
-
-        // -------------------------
-        // Chart
-        // -------------------------
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(Modifier.padding(14.dp)) {
-                Text("四時段工作時長（Task / 純行程）", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(10.dp))
-
-                val buckets = remember(summary.stats4x3) {
-                    listOf(
-                        BucketUi("深夜", "00–06", summary.stats4x3.sleepTask, summary.stats4x3.sleepFree),
-                        BucketUi("早", "06–12", summary.stats4x3.morningTask, summary.stats4x3.morningFree),
-                        BucketUi("中", "12–18", summary.stats4x3.afternoonTask, summary.stats4x3.afternoonFree),
-                        BucketUi("晚", "18–24", summary.stats4x3.eveningTask, summary.stats4x3.eveningFree),
-                    )
-                }
-                val totalAllMs = remember(buckets) { buckets.sumOf { it.totalMs }.coerceAtLeast(1L) }
-
-                StackedBars4WithAxis(
-                    buckets = buckets,
-                    selectedIndex = selectedBucketIndex,
-                    onSelect = { selectedBucketIndex = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
-                )
-
-                Spacer(Modifier.height(10.dp))
-                LegendRow()
-
-                // ✅選擇後資訊：獨立 Highlight Card（不同底色），避免跑版 + 更商業
-                val selected = selectedBucketIndex?.let { buckets.getOrNull(it) }
-                if (selected != null) {
-                    val selectedTotal = selected.totalMs
-                    val percent = (selectedTotal.toDouble() / totalAllMs.toDouble() * 100.0).coerceIn(0.0, 100.0)
 
                     Spacer(Modifier.height(10.dp))
 
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                        shape = RoundedCornerShape(16.dp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        DateBox(
+                            modifier = Modifier.weight(1f),
+                            label = "開始日期",
+                            dayMillis = startDay,
+                            onPick = { vm.setStartDay(it) },
+                            onClear = { vm.setStartDay(null) }
+                        )
+                        DateBox(
+                            modifier = Modifier.weight(1f),
+                            label = "結束日期",
+                            dayMillis = endDay,
+                            onPick = { vm.setEndDay(it) },
+                            onClear = { vm.setEndDay(null) }
+                        )
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = keyword,
+                        onValueChange = vm::setKeyword,
+                        singleLine = true,
+                        label = { Text("篩選標題 + 內容 (關鍵字)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(
-                                text = "已選：${selected.label} ${selected.range}  •  佔比 ${percent.toInt()}%",
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = "Task ${fmtHours(msToHours(selected.taskMs))} / 純行程 ${fmtHours(msToHours(selected.freeMs))}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = "該時段總時長：${fmtHours(msToHours(selectedTotal))}",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = includeTask, onCheckedChange = vm::setIncludeTask)
+                            Text("顯示 Task")
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = includeFree, onCheckedChange = vm::setIncludeFree)
+                            Text("顯示 純行程")
                         }
                     }
-                } else {
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = "提示：點擊柱狀圖查看該時段的時長與佔比",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+
+                    if (ui.error != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(ui.error!!, color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
-        }
 
-        Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
 
-        // -------------------------
-        // List title + ✅色碼說明
-        // -------------------------
-        Text(
-            text = "本次查詢清單(共 ${ui.items.size} 筆)",
-            style = MaterialTheme.typography.titleMedium
-        )
+            // -------------------------
+            // Dashboard
+            // -------------------------
+            val summary = ui.summary
+            val totalH = msToHours(summary.totalMs)
+            val taskH = msToHours(summary.taskMs)
+            val freeH = msToHours(summary.freeMs)
+            val focusDensity =
+                if (summary.totalMs <= 0L) 0f else (summary.taskMs.toFloat() / summary.totalMs.toFloat())
 
-        Spacer(Modifier.height(6.dp))
-
-        TimeBucketLegendRow() // ✅ 新增：深夜/早/中/晚標註列
-
-        Spacer(Modifier.height(8.dp))
-
-        if (ui.loading) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(10.dp))
-        }
-
-        // -------------------------
-        // List
-        // -------------------------
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            ui.items.forEach { item ->
-                SlotRowWithTimeBuckets(item)
+            // ✅總累計時長更突出：primaryContainer + 大字
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MetricCardEmphasis(
+                    title = "總累計時長",
+                    value = fmtHours(totalH),
+                    modifier = Modifier.weight(3f)
+                )
+                MetricCard(
+                    title = "Task 佔比（專注度）",
+                    value = "${(focusDensity * 100).toInt()}%",
+                    modifier = Modifier.weight(2f),
+                    container = MaterialTheme.colorScheme.surfaceVariant
+                )
             }
-        }
 
-        Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(10.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                MetricCard(
+                    "Task 小時",
+                    fmtHours(taskH),
+                    Modifier.weight(1f),
+                    MaterialTheme.colorScheme.surfaceVariant
+                )
+                MetricCard(
+                    "純行程 小時",
+                    fmtHours(freeH),
+                    Modifier.weight(1f),
+                    MaterialTheme.colorScheme.surfaceVariant
+                )
+            }
+
+            Text(
+                text = "「Task 佔比」＝ Task 時間 ÷ 總時間，用來看你有多少時間花在可交付的任務上。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(Modifier.height(14.dp))
+
+            // -------------------------
+            // Chart
+            // -------------------------
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text(
+                        "四時段工作時長（Task / 純行程）",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(Modifier.height(10.dp))
+
+                    val buckets = remember(summary.stats4x3) {
+                        listOf(
+                            BucketUi(
+                                "深夜",
+                                "00–06",
+                                summary.stats4x3.sleepTask,
+                                summary.stats4x3.sleepFree
+                            ),
+                            BucketUi(
+                                "早",
+                                "06–12",
+                                summary.stats4x3.morningTask,
+                                summary.stats4x3.morningFree
+                            ),
+                            BucketUi(
+                                "中",
+                                "12–18",
+                                summary.stats4x3.afternoonTask,
+                                summary.stats4x3.afternoonFree
+                            ),
+                            BucketUi(
+                                "晚",
+                                "18–24",
+                                summary.stats4x3.eveningTask,
+                                summary.stats4x3.eveningFree
+                            ),
+                        )
+                    }
+                    val totalAllMs =
+                        remember(buckets) { buckets.sumOf { it.totalMs }.coerceAtLeast(1L) }
+
+                    StackedBars4WithAxis(
+                        buckets = buckets,
+                        selectedIndex = selectedBucketIndex,
+                        onSelect = { selectedBucketIndex = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+                    LegendRow()
+
+                    // ✅選擇後資訊：獨立 Highlight Card（不同底色），避免跑版 + 更商業
+                    val selected = selectedBucketIndex?.let { buckets.getOrNull(it) }
+                    if (selected != null) {
+                        val selectedTotal = selected.totalMs
+                        val percent =
+                            (selectedTotal.toDouble() / totalAllMs.toDouble() * 100.0).coerceIn(
+                                0.0,
+                                100.0
+                            )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "已選：${selected.label} ${selected.range}  •  佔比 ${percent.toInt()}%",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    text = "Task ${fmtHours(msToHours(selected.taskMs))} / 純行程 ${
+                                        fmtHours(
+                                            msToHours(selected.freeMs)
+                                        )
+                                    }",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = "該時段總時長：${fmtHours(msToHours(selectedTotal))}",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            text = "提示：點擊柱狀圖查看該時段的時長與佔比",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // -------------------------
+            // List title + ✅色碼說明
+            // -------------------------
+            Text(
+                text = "本次查詢清單(共 ${ui.items.size} 筆)",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            TimeBucketLegendRow() // ✅ 新增：深夜/早/中/晚標註列
+
+            Spacer(Modifier.height(8.dp))
+
+            if (ui.loading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(10.dp))
+            }
+
+            // -------------------------
+            // List
+            // -------------------------
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ui.items.forEach { item ->
+                    SlotRowWithTimeBuckets(item)
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                text = "本次查詢清單(共 ${ui.items.size} 筆) 已結束",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
     }
+
+    Spacer(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .padding(bottom = 0.dp)
+    )
 }
 
 @Composable
