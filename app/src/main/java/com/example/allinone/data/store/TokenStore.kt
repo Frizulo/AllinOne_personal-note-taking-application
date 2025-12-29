@@ -43,10 +43,16 @@ class TokenStore(private val context: Context) {
 
     fun peekUserUid(): Long? = cachedUid
     suspend fun saveLogin(token: String, uid: Long, name: String) {
+        val oldUid = cachedUid
+
         context.dataStore.edit {
             it[KEY_TOKEN] = token
             it[KEY_UID] = uid
             it[KEY_NAME] = name
+
+            if (oldUid != null && oldUid != uid) {
+                it.remove(KEY_LAST_SYNC)
+            }
         }
         // ✅ 同步更新 cache
         cachedUid = uid
