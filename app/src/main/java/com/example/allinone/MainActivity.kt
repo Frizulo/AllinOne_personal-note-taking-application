@@ -162,18 +162,19 @@ private fun AppRoot() {
                     viewModel = homeVm,
                     onLogout = {
                         scope.launch {
-                            // 清除 token / uid / name
                             tokenStore.clear()
-
-                            // 回到登入流程
-                            nav.navigate("landing") {
-                                popUpTo(0) { inclusive = true }
-                                launchSingleTop = true
-                            }
                         }
-                    }
+                        nav.navigate("landing") {
+                            popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                    onGoTasks = { nav.navigate(Screen.Tasks.route) },
+                    onGoSchedule = { nav.navigate(Screen.Schedule.route) },
+                    onGoAnalysis = { nav.navigate(Screen.Analysis.route) }
                 )
             }
+
 
 
             composable(Screen.Tasks.route) {
