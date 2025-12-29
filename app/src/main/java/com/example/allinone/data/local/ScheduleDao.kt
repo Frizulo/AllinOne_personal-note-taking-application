@@ -54,6 +54,43 @@ interface ScheduleDao {
     """)
     fun observeSlotsWithTask(uid: Long, date: Long): Flow<List<ScheduleSlotWithTask>>
 
+    // ✅ Analysis / 查詢報表：依期間 + 關鍵字 + 類型（Task / 純行程）查詢
+    // - startDate / endDate 為「dateMillis（當日 00:00）」的範圍（可為 null 表示不限制）
+    // - keyword 會比對：task.title / task.detail / slot.customTitle
+    @Query(
+        """
+        SELECT s.*,
+               t.title AS taskTitle,
+               t.quadrant AS taskQuadrant
+        FROM schedule_slots s
+        LEFT JOIN tasks t ON s.localTaskId = t.localId
+        WHERE s.ownerUid = :uid
+          AND s.deletedTimeMillis IS NULL
+          AND (:startDate IS NULL OR s.dateMillis >= :startDate)
+          AND (:endDate IS NULL OR s.dateMillis <= :endDate)
+          AND (
+                :keyword IS NULL OR :keyword = ''
+                OR (t.title LIKE '%' || :keyword || '%')
+                OR (t.detail LIKE '%' || :keyword || '%')
+                OR (s.customTitle LIKE '%' || :keyword || '%')
+          )
+          AND (
+                (:includeTask = 1 AND s.localTaskId IS NOT NULL)
+                OR (:includeFree = 1 AND s.localTaskId IS NULL)
+          )
+        ORDER BY s.dateMillis ASC, s.startTimeMillis ASC
+        """
+    )
+    suspend fun querySlotsWithTaskForAnalysis(
+        uid: Long,
+        startDate: Long?,
+        endDate: Long?,
+        keyword: String?,
+        includeTask: Int,
+        includeFree: Int
+    ): List<ScheduleSlotWithTask>
+
+
     @Query("""
         UPDATE schedule_slots
         SET deletedTimeMillis = :now,

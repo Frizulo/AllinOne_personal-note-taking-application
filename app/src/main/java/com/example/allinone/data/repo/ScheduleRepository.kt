@@ -17,6 +17,37 @@ class ScheduleRepository(
     }
 
     /**
+     * ✅ Analysis / 查詢報表：依期間 + 關鍵字 + 類型查詢（Task / 純行程）
+     * - startDate / endDate：dateMillis（當日 00:00），可為 null 表示不限制
+     * - keyword：比對 task.title / task.detail / slot.customTitle（空字串等同 null）
+     */
+    suspend fun querySlotsForAnalysis(
+        uid: Long,
+        startDate: Long?,
+        endDate: Long?,
+        keyword: String?,
+        includeTask: Boolean,
+        includeFree: Boolean
+    ): List<ScheduleSlotWithTask> {
+        val k = keyword?.trim().orEmpty()
+        val normalizedKeyword = if (k.isBlank()) null else k
+
+        // 兩個都沒勾選時，視為全選（避免查不到資料造成困惑）
+        val taskFlag = if (includeTask || (!includeTask && !includeFree)) 1 else 0
+        val freeFlag = if (includeFree || (!includeTask && !includeFree)) 1 else 0
+
+        return scheduleDao.querySlotsWithTaskForAnalysis(
+            uid = uid,
+            startDate = startDate,
+            endDate = endDate,
+            keyword = normalizedKeyword,
+            includeTask = taskFlag,
+            includeFree = freeFlag
+        )
+    }
+
+
+    /**
      * 新增/編輯 slot（不允許重疊、不允許跨日、會自動 normalize dateMillis = start 的當日 00:00）
      */
     suspend fun saveSlot(slot: ScheduleSlotEntity): SaveSlotResult {
@@ -190,6 +221,54 @@ class ScheduleRepository(
 
         return stats
     }
+
+    data class AnalysisSummary(
+        val totalMs: Long,
+        val taskMs: Long,
+        val freeMs: Long,
+        val stats4x3: ScheduleStats4x3
+    )
+
+    /**
+     * ✅ 多日統計：把 slots 依 dateMillis 分組，逐日計算 4x3，再加總
+     */
+    fun summarizeForAnalysis(slots: List<ScheduleSlotWithTask>): AnalysisSummary {
+        var total = 0L
+        var task = 0L
+        var free = 0L
+        var stats = ScheduleStats4x3()
+
+        val grouped = slots.groupBy { it.slot.dateMillis }
+        for ((day0, daySlots) in grouped) {
+            // 總時長
+            for (it in daySlots) {
+                val dur = (it.slot.endTimeMillis - it.slot.startTimeMillis).coerceAtLeast(0)
+                total += dur
+                if (it.slot.localTaskId != null) task += dur else free += dur
+            }
+            // 4x3 分段（處理跨時段切割）
+            stats = mergeStats(stats, calculate4x3Stats(day0, daySlots))
+        }
+
+        return AnalysisSummary(totalMs = total, taskMs = task, freeMs = free, stats4x3 = stats)
+    }
+
+    private fun mergeStats(a: ScheduleStats4x3, b: ScheduleStats4x3): ScheduleStats4x3 =
+        ScheduleStats4x3(
+            sleepTotal = a.sleepTotal + b.sleepTotal,
+            sleepTask = a.sleepTask + b.sleepTask,
+            sleepFree = a.sleepFree + b.sleepFree,
+            morningTotal = a.morningTotal + b.morningTotal,
+            morningTask = a.morningTask + b.morningTask,
+            morningFree = a.morningFree + b.morningFree,
+            afternoonTotal = a.afternoonTotal + b.afternoonTotal,
+            afternoonTask = a.afternoonTask + b.afternoonTask,
+            afternoonFree = a.afternoonFree + b.afternoonFree,
+            eveningTotal = a.eveningTotal + b.eveningTotal,
+            eveningTask = a.eveningTask + b.eveningTask,
+            eveningFree = a.eveningFree + b.eveningFree,
+        )
+
 
     // --------------------
     // Helpers

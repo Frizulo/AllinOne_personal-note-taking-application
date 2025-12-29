@@ -7,13 +7,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -31,6 +31,8 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.allinone.di.ServiceLocator
+import com.example.allinone.ui.analysis.AnalysisScreen
+import com.example.allinone.ui.analysis.AnalysisViewModel
 import com.example.allinone.ui.auth.AuthViewModel
 import com.example.allinone.ui.auth.LandingScreen
 import com.example.allinone.ui.auth.LoginScreen
@@ -44,6 +46,8 @@ import com.example.allinone.ui.tasks.TasksScreen
 import com.example.allinone.ui.tasks.TasksViewModel
 import com.example.allinone.ui.theme.AppTheme
 import com.example.allinone.worker.SyncWorker
+import kotlinx.coroutines.launch
+
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.O)
@@ -74,11 +78,21 @@ private fun AppRoot() {
             }
         }
     )
+    val scope = rememberCoroutineScope()
+    val tokenStore = remember { ServiceLocator.tokenStore(context) }
+
+    val authVm = remember { AuthViewModel(ServiceLocator.authRepository(context)) }
     val tasksVm = remember { TasksViewModel(ServiceLocator.tasksRepository(context)) }
     val homeVm = remember { HomeViewModel(ServiceLocator.tasksRepository(context),ServiceLocator.weatherRepository(context)) }
     val scheduleVm = remember {
         ScheduleViewModel(
             tasksRepo = ServiceLocator.tasksRepository(context),
+            scheduleRepo = ServiceLocator.scheduleRepository(context),
+            tokenStore = ServiceLocator.tokenStore(context)
+        )
+    }
+    val analysisVm = remember {
+        AnalysisViewModel(
             scheduleRepo = ServiceLocator.scheduleRepository(context),
             tokenStore = ServiceLocator.tokenStore(context)
         )
@@ -92,7 +106,7 @@ private fun AppRoot() {
         Screen.Home.route,
         Screen.Tasks.route,
         Screen.Schedule.route,
-        Screen.Saved.route
+        Screen.Analysis.route
     )
 
     Scaffold(
@@ -154,8 +168,25 @@ private fun AppRoot() {
 
             composable(Screen.Home.route) {
                 val username by authVm.username.collectAsState()
-                HomeScreen(username = username, homeVm)
+                HomeScreen(
+                    username = username,
+                    viewModel = homeVm,
+                    onLogout = {
+                        scope.launch {
+                            tokenStore.clear()
+                        }
+                        nav.navigate("landing") {
+                            popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
+                    onGoTasks = { nav.navigate(Screen.Tasks.route) },
+                    onGoSchedule = { nav.navigate(Screen.Schedule.route) },
+                    onGoAnalysis = { nav.navigate(Screen.Analysis.route) }
+                )
             }
+
+
 
             composable(Screen.Tasks.route) {
                 TasksScreen(viewModel = tasksVm)
@@ -165,9 +196,8 @@ private fun AppRoot() {
             composable(Screen.Schedule.route) {
                 ScheduleScreen(scheduleVm)
             }
-            composable(Screen.Saved.route) {
-                val username by authVm.username.collectAsState()
-                HomeScreen(username = username, homeVm)
+            composable(Screen.Analysis.route) {
+                AnalysisScreen(analysisVm)
             }
         }
     }

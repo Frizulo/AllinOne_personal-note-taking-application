@@ -4,13 +4,18 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Task
-import androidx.compose.material3.*
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -29,17 +34,17 @@ fun AllInOneBottomBar(
     onNavigate: (String) -> Unit
 ) {
     val navItems = listOf(
-        NavItem("Home", Icons.Default.Home, "home"),
-        NavItem("Tasks", Icons.Default.Task, "tasks"),
-        NavItem("Schedule", Icons.Default.CalendarMonth, "schedule"),
-        NavItem("Saved", Icons.Default.Bookmark, "saved")
+        NavItem("Home", Icons.Default.Home, Screen.Home.route),
+        NavItem("Tasks", Icons.Default.Task, Screen.Tasks.route),
+        NavItem("Schedule", Icons.Default.CalendarMonth, Screen.Schedule.route),
+        NavItem("Analysis", Icons.Default.BarChart, Screen.Analysis.route)
     )
 
     // In real devices, NavigationBar applies navigationBars insets by default, which can look like
     // an extra blank strip above the bar even if Preview looks fine. We disable the default insets
     // and control the bar height ourselves.
     NavigationBar(
-        modifier = androidx.compose.ui.Modifier.height(80.dp).padding(top = 0.dp, bottom = 24.dp),
+        modifier = androidx.compose.ui.Modifier.height(90.dp).padding(top = 0.dp, bottom = 24.dp),
         windowInsets = WindowInsets(0),
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = NavigationBarDefaults.Elevation

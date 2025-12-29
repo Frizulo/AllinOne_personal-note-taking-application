@@ -2,13 +2,12 @@ package com.example.allinone.data.repo
 
 import com.example.allinone.data.remote.weather.GeoApi
 import com.example.allinone.data.remote.weather.WeatherApi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 data class HomeWeather(
     val city: String,
     val tempC: Int,
+    val weatherCode: Int?,
     val description: String,
     val todayMaxC: Int,
     val todayMinC: Int
@@ -28,8 +27,9 @@ class WeatherRepository(
         val min = w.daily?.temperature_2m_min?.firstOrNull()?.roundToInt() ?: temp
 
         return HomeWeather(
-            city = cityName, // UI 顯示用縣市名
+            city = cityName,
             tempC = temp,
+            weatherCode = code,
             description = weatherCodeToZh(code),
             todayMaxC = max,
             todayMinC = min
@@ -39,14 +39,14 @@ class WeatherRepository(
     private fun weatherCodeToZh(code: Int?): String {
         return when (code) {
             0 -> "晴朗"
-            1,2,3 -> "多雲"
-            45,48 -> "有霧"
-            51,53,55 -> "毛毛雨"
-            61,63,65 -> "下雨"
-            71,73,75 -> "下雪"
-            80,81,82 -> "陣雨"
+            1, 2, 3 -> "多雲"
+            45, 48 -> "有霧"
+            51, 53, 55 -> "毛毛雨"
+            61, 63, 65 -> "下雨"
+            71, 73, 75 -> "下雪"
+            80, 81, 82 -> "陣雨"
             95 -> "雷雨"
-            96,99 -> "強雷雨"
+            96, 99 -> "強雷雨"
             null -> "未知"
             else -> "天氣代碼 $code"
         }
