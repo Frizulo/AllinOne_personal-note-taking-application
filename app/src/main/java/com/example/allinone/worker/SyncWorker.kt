@@ -15,6 +15,7 @@ class SyncWorker(
 
     @RequiresApi(Build.VERSION_CODES.O)
     override suspend fun doWork(): Result {
+        //Log.d("AUTH", "tokenPrefix=" + (appContext?.take(12) ?: "null"))
         Log.d("SyncWorker", "SyncWorker START")
         return runCatching {
             ServiceLocator.tasksRepository(applicationContext).syncOnce()

@@ -21,6 +21,7 @@ class AuthViewModel(private val repo: AuthRepository) : ViewModel() {
     private val _username = MutableStateFlow<String?>(null)
     val username: StateFlow<String?> = _username
 
+
     fun login(name: String, password: String, appContext : Context, onSuccess: () -> Unit) {
         _username.value = name
         viewModelScope.launch {
