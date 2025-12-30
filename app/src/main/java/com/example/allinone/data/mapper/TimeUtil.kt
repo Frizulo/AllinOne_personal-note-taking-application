@@ -35,6 +35,10 @@ fun utcMillisFixToTaipeiMillis(utcMillis: Long): Long {
     return utcMillis + TAIPEI_OFFSET_MS
 }
 
+fun TaipeiMillisFixToUtcMillis(utcMillis: Long): Long {
+    return utcMillis - TAIPEI_OFFSET_MS
+}
+
 @RequiresApi(Build.VERSION_CODES.O)
 fun millisToServerIso(millis: Long): String =
     MYSQL_MILLIS.format(Instant.ofEpochMilli(millis))

@@ -1,12 +1,14 @@
 package com.example.allinone.ui.tasks
 
 
+import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.allinone.data.local.entities.TaskEntity
 import com.example.allinone.data.repo.TasksRepository
+import com.example.allinone.worker.SyncScheduler
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -38,9 +40,9 @@ class TasksViewModel(private val repo: TasksRepository) : ViewModel() {
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    fun syncOnce() {
+    fun syncOnce(appContext: Context) {
         viewModelScope.launch {
-            runCatching { repo.syncOnce() }
+            runCatching { SyncScheduler.enqueueOneTimeSync(appContext) }
                 .onFailure { e ->
                     e.printStackTrace() // 或 Log.e("SYNC", "syncOnce failed", e)
                 }

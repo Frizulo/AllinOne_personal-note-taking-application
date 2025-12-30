@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,7 +43,7 @@ fun TasksScreen(
     var searchQuery by remember { mutableStateOf("") }
 
     val uiState by viewModel.tasks.collectAsState()
-
+    val appContext = LocalContext.current.applicationContext
 
     var showEdit by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<TaskEntity?>(null) }
@@ -81,7 +82,7 @@ fun TasksScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Tasks", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                    IconButton(onClick = { viewModel.syncOnce() }) {
+                    IconButton(onClick = { viewModel.syncOnce(appContext) }) {
                         Icon(Icons.Default.Sync, contentDescription = "Sync")
                     }
                     Row(modifier = Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
