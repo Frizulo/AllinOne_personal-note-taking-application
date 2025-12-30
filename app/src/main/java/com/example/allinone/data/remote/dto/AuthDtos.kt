@@ -19,3 +19,8 @@ data class AuthResponse(
 data class RegisterResponse(
     val uid: Long
 )
+
+data class ApiErrorResponse(
+    val error: String? = null,
+    val message: String? = null
+)

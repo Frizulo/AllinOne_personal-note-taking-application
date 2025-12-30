@@ -10,6 +10,7 @@ import com.example.allinone.data.mapper.toPushItem
 import com.example.allinone.data.remote.AllInOneApi
 import com.example.allinone.data.remote.dto.PushRequest
 import com.example.allinone.data.store.TokenStore
+import com.example.allinone.di.ServiceLocator
 import kotlinx.coroutines.flow.Flow
 
 class TasksRepository(
@@ -128,6 +129,7 @@ class TasksRepository(
 
     @RequiresApi(Build.VERSION_CODES.O)
     suspend fun pullIncremental() {
+        val uid = tokenStore.getUserUid() ?: error("not logged in")
         val since = tokenStore.getLastSyncIso() ?: "1970-01-01T00:00:00Z"
         val resp = api.pullChanges(since)
         tokenStore.setLastSyncIso(resp.serverTime)
@@ -143,6 +145,26 @@ class TasksRepository(
             dao.upsert(entity)
         }
     }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    suspend fun pullIncrementalSince(since: String): String {
+        val uid = tokenStore.getUserUid() ?: error("not logged in")
+        val resp = api.pullChanges(since)
+
+        // upsert by serverTid
+        for (dto in resp.items) {
+            val existing = dao.findByServerTid(dto.tid)
+            if (dto.deletedTime != null) {
+                existing?.let { dao.hardDeleteByLocalId(it.localId) }
+                continue
+            }
+            val entity = dto.toEntity(existingLocalId = existing?.localId)
+            dao.upsert(entity)
+        }
+
+        return resp.serverTime
+    }
+
 
     suspend fun observeTasks(query: String): Flow<List<TaskEntity>> {
         val q = query.trim()

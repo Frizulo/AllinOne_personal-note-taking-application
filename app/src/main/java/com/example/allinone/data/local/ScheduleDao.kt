@@ -116,4 +116,22 @@ interface ScheduleDao {
         taskTitle: String,
         now: Long
     )
+
+    //Sync
+    @Query("""
+      SELECT * FROM schedule_slots
+      WHERE ownerUid = :uid
+        AND syncState IN (1,2,3)
+    """)
+    suspend fun getPending(uid: Long): List<ScheduleSlotEntity>
+
+    @Query("SELECT * FROM schedule_slots WHERE slotId = :slotId LIMIT 1")
+    suspend fun findBySlotId(slotId: Long): ScheduleSlotEntity?
+
+    @Query("SELECT * FROM schedule_slots WHERE serverSlotId = :serverId LIMIT 1")
+    suspend fun findByServerSlotId(serverId: Long): ScheduleSlotEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(slot: ScheduleSlotEntity)
+
 }

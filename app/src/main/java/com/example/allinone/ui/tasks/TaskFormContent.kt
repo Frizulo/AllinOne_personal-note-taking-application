@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -79,14 +80,21 @@ fun TaskFormContent(
         Spacer(modifier = Modifier.height(16.dp))
         Text("象限", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            (0..3).forEach { q ->
-                val Q = q + 1
-                FilterChip(
-                    selected = quadrant == q,
-                    onClick = { onQuadrantChange(q) },
-                    label = { Text("Q$Q") }
-                )
+        Row(
+            modifier = Modifier.fillMaxWidth().height(110.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ColorQuadrantBtn("?", quadrant == 4, 4, Modifier.weight(1.5f).fillMaxHeight()) { onQuadrantChange(4) }
+            Column(modifier = Modifier.weight(8.5f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ColorQuadrantBtn("重要&不緊急", quadrant == 0, 0, Modifier.weight(1f)) { onQuadrantChange(0) }
+                    ColorQuadrantBtn("重要&緊急", quadrant == 1, 1, Modifier.weight(1f)) { onQuadrantChange(1) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ColorQuadrantBtn("不重要&不緊急", quadrant == 2, 2, Modifier.weight(1f)) { onQuadrantChange(2) }
+                    ColorQuadrantBtn("不重要&緊急", quadrant == 3, 3, Modifier.weight(1f)) { onQuadrantChange(3) }
+                }
             }
         }
 

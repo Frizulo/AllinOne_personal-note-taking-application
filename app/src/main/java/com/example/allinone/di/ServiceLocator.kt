@@ -38,8 +38,10 @@ object ServiceLocator {
 
     fun scheduleRepository(context: Context): ScheduleRepository =
         scheduleRepo ?: synchronized(this) {
+            val ts = tokenStore(context)
+            val api = ApiProvider.create(context.applicationContext, ts)
             val dao = database(context).scheduleDao()
-            ScheduleRepository(scheduleDao = dao)
+            ScheduleRepository(scheduleDao = dao, api = api, tokenStore = ts)
                 .also { scheduleRepo = it }
         }
 
