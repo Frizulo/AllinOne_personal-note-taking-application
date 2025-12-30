@@ -44,6 +44,10 @@ fun millisToServerIso(millis: Long): String =
     MYSQL_MILLIS.format(Instant.ofEpochMilli(millis))
 
 @RequiresApi(Build.VERSION_CODES.O)
+fun millisToSyncIsoZ(millis: Long): String =
+    Instant.ofEpochMilli(millis).toString()
+
+@RequiresApi(Build.VERSION_CODES.O)
 fun normalizeToLocalStartOfDay(millis: Long): String {
     val cal = java.util.Calendar.getInstance()
     cal.timeInMillis = millis

@@ -133,6 +133,7 @@ class ScheduleViewModel(
 
     data class SlotDraft(
         val slotId: Long = 0,
+        val serverSlotId: Long? = null,
         val ownerUid: Long,
         val dateMillis: Long,
         val startTimeMillis: Long,
@@ -143,6 +144,7 @@ class ScheduleViewModel(
     ) {
         fun toEntity(): ScheduleSlotEntity = ScheduleSlotEntity(
             slotId = slotId,
+            serverSlotId = serverSlotId,
             ownerUid = ownerUid,
             dateMillis = dateMillis,
             startTimeMillis = startTimeMillis,
@@ -221,6 +223,7 @@ class ScheduleViewModel(
             isNew = false,
             draft = SlotDraft(
                 slotId = slot.slotId,
+                serverSlotId = slot.serverSlotId,
                 ownerUid = slot.ownerUid,
                 dateMillis = slot.dateMillis,
                 startTimeMillis = slot.startTimeMillis,

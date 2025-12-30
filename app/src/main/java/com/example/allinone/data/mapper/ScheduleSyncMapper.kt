@@ -18,7 +18,7 @@ fun ScheduleSlotEntity.toSchedulePushItem(op: String): ScheduleSyncPushItem {
         localTaskId = localTaskId,
         customTitle = customTitle,
         note = note,
-        updatedTime = millisToServerIso(updatedTimeMillis)
+        updatedTime = millisToSyncIsoZ(updatedTimeMillis)
     )
 }
 

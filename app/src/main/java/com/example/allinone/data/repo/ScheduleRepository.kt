@@ -107,8 +107,8 @@ class ScheduleRepository(
 
         // 6) insert / update
         val pendingState = when {
-            finalSlot.slotId == 0L -> 1 // PendingCreate
-            finalSlot.serverSlotId == null -> 1 // 還沒上傳過，一律視為 create
+            finalSlot.syncState == 3 -> 3 // PendingCreate
+            finalSlot.slotId == 0L || finalSlot.syncState == 1 -> 1// 還沒上傳過，一律視為 create
             else -> 2 // PendingUpdate
         }
 

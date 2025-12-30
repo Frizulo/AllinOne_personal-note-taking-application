@@ -18,7 +18,7 @@ class SyncWorker(
         Log.d("SyncWorker", "SyncWorker START")
         return runCatching {
             val ts = ServiceLocator.tokenStore(applicationContext)
-            val since = ts.getLastSyncIso() ?: "1970-01-01T00:00:00Z"
+            val since = ts.getLastSyncIso() ?: "1970-01-01 00:00:00.000"
 
             val tasksRepo = ServiceLocator.tasksRepository(applicationContext)
             val scheduleRepo = ServiceLocator.scheduleRepository(applicationContext)
