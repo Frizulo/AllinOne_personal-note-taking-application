@@ -219,8 +219,39 @@ val surfaceContainerHighDarkHighContrast = Color(0xFF393B42)
 val surfaceContainerHighestDarkHighContrast = Color(0xFF44474D)
 
 
+/* ---------------- Semantic colors (App-specific) ----------------
+ * 這裡定義「語意色票」，用來確保 Tasks / Schedule / Analysis / Home 的顏色一致，
+ * 並且不會被 dynamicColor (Material You 動態配色) 影響。
+ *
+ * 使用方式：Theme.kt 會把這些色票透過 LocalAppColors 提供給整個 App。
+ */
+
+// Task status colors (not yet / in progress / done)
+val StatusNotYet = Color(0xFFF2BA58)      // 橘：待開始
+val StatusInProgress = Color(0xFFF2BA58)  // 藍：進行中（靠近你整體主色系）
+val StatusDone = Color(0xFFF2BA58)        // 綠：完成（柔和、但可辨識）
+
+// Eisenhower quadrants (更強的亮度差異，餘光可辨識)
+val QuadrantImportantNotUrgent = Color(0xFF7AB6E8) // 重要&不緊急：明亮藍
+val QuadrantImportantUrgent = Color(0xFFEA7A73)    // 重要&緊急：鮮紅
+val QuadrantNotImportantNotUrgent = Color(0xFF77C07B) // 不重要&不緊急：柔和綠
+val QuadrantNotImportantUrgent = Color(0xFFB07AC7) // 不重要&緊急：亮紫
+
+// Time buckets (夜/早/中/晚) — 用「意象色」幫助直覺辨識
+val TimeNight = Color(0xFF7690D2)   // 深藍
+val TimeMorning = Color(0xFFD29E76) // 淺橘
+val TimeNoon = Color(0xFF8FD276)   // 明黃
+val TimeEvening = Color(0xFF9976D2) // 粉紫
+
+// Schedule accents (任務關聯 / 純行程)
+val ScheduleTaskAccent = StatusInProgress
+val ScheduleFreeAccent = Color(0xFF607D8B) // 藍灰：純行程
 
 
 
-
+// Time bucket pastel backgrounds (用於卡片底色 / 圖表 / 膠囊，保持一致且不刺眼)
+val TimeNightBg = Color(0xFFD6DAE6)    // 夜：灰藍（接近你目前統計卡片）
+val TimeMorningBg = Color(0xFFD7E6F7)  // 早：淡藍
+val TimeNoonBg = Color(0xFFF3EBDD)     // 中：淡米/淡黃
+val TimeEveningBg = Color(0xFFEBDCF2)  // 晚：淡粉紫
 

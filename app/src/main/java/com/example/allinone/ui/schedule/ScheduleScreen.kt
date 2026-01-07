@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.allinone.data.local.ScheduleSlotWithTask
+import com.example.allinone.ui.theme.LocalAppColors
 import com.example.allinone.data.local.entities.ScheduleSlotEntity
 import com.example.allinone.data.local.entities.TaskEntity
 import com.example.allinone.data.repo.ScheduleRepository
@@ -635,10 +636,10 @@ private fun TimelineBackground(
         fun segTop(h: Int) = hourHeight * h
         fun segHeight(from: Int, to: Int) = hourHeight * (to - from)
 
-        SegmentBg(railWidth, segTop(0), segHeight(0, 6), MaterialTheme.colorScheme.secondary, 0.30f) // Sleep
-        SegmentBg(railWidth, segTop(6), segHeight(6, 12), MaterialTheme.colorScheme.primary, 0.30f) // Morning
-        SegmentBg(railWidth, segTop(12), segHeight(12, 18), MaterialTheme.colorScheme.tertiary, 0.30f) // Afternoon
-        SegmentBg(railWidth, segTop(18), segHeight(18, 24), MaterialTheme.colorScheme.error, 0.30f) // Evening
+        SegmentBg(railWidth, segTop(0), segHeight(0, 6), LocalAppColors.current.timeNightBg, 0.50f) // Sleep
+        SegmentBg(railWidth, segTop(6), segHeight(6, 12), LocalAppColors.current.timeMorningBg, 0.50f) // Morning
+        SegmentBg(railWidth, segTop(12), segHeight(12, 18), LocalAppColors.current.timeNoonBg, 0.50f) // Afternoon
+        SegmentBg(railWidth, segTop(18), segHeight(18, 24), LocalAppColors.current.timeEveningBg, 0.50f) // Evening
 
         Column(
             modifier = Modifier
@@ -708,15 +709,16 @@ private fun TimelineSlotBlock(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val appColors = LocalAppColors.current
     val barColor = if (isTask) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.80f)
+        appColors.scheduleTaskAccent.copy(alpha = 0.90f)
     } else {
-        MaterialTheme.colorScheme.secondary.copy(alpha = 0.80f)
+        appColors.scheduleFreeAccent.copy(alpha = 0.90f)
     }
     val cardBg = if (isTask) {
-        MaterialTheme.colorScheme.surface
+        MaterialTheme.colorScheme.surfaceContainerLow
     } else {
-        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        MaterialTheme.colorScheme.surfaceContainerHigh
     }
 
     Surface(
@@ -751,7 +753,7 @@ private fun TimelineSlotBlock(
                 Text(
                     if (isTask) "任務" else "純行程",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.60f)
+                    color = barColor.copy(alpha = 0.95f)
                 )
             }
 
@@ -775,16 +777,19 @@ private fun StatsRow4(stats: ScheduleRepository.ScheduleStats4x3) {
     )
 
     @Composable
-    fun bucketColor(label: String): Color = when (label) {
-        "睡" -> MaterialTheme.colorScheme.secondary
-        "早" -> MaterialTheme.colorScheme.primary
-        "中" -> MaterialTheme.colorScheme.tertiary
-        "晚" -> MaterialTheme.colorScheme.error
-        else -> MaterialTheme.colorScheme.primary
+    fun bucketColor(label: String): Color {
+        val c = LocalAppColors.current
+        return when (label) {
+            "夜" -> c.timeNightBg
+            "早" -> c.timeMorningBg
+            "中" -> c.timeNoonBg
+            "晚" -> c.timeEveningBg
+            else -> c.timeMorningBg
+        }
     }
 
     val entries = listOf(
-        Entry("睡", stats.sleepTotal, stats.sleepTask, stats.sleepFree, bucketColor("睡")),
+        Entry("夜", stats.sleepTotal, stats.sleepTask, stats.sleepFree, bucketColor("夜")),
         Entry("早", stats.morningTotal, stats.morningTask, stats.morningFree, bucketColor("早")),
         Entry("中", stats.afternoonTotal, stats.afternoonTask, stats.afternoonFree, bucketColor("中")),
         Entry("晚", stats.eveningTotal, stats.eveningTask, stats.eveningFree, bucketColor("晚")),
@@ -795,7 +800,7 @@ private fun StatsRow4(stats: ScheduleRepository.ScheduleStats4x3) {
         modifier = Modifier.fillMaxWidth()
     ) {
         items(entries) { e ->
-            val bg = e.color.copy(alpha = 0.18f)
+            val bg = e.color.copy(alpha = 0.5f)
 
             Surface(
                 shape = RoundedCornerShape(14.dp),
