@@ -4,6 +4,7 @@ import android.app.DatePickerDialog
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.allinone.data.local.ScheduleSlotWithTask
+import com.example.allinone.ui.theme.LocalAppColors
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -166,28 +168,12 @@ fun AnalysisScreen(vm: AnalysisViewModel) {
                     if (selected != null) {
                         val percent = (selected.totalMs.toDouble() / totalAllMs.toDouble() * 100).toInt()
 
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text("${selected.label}（${selected.range}）", fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.height(6.dp))
-                                Row(verticalAlignment = Alignment.Bottom) {
-                                    Text(
-                                        fmtHours(msToHours(selected.totalMs)),
-                                        style = MaterialTheme.typography.headlineSmall
-                                    )
-                                    Spacer(Modifier.width(10.dp))
-                                    Text(
-                                        "佔比 $percent%",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                                    )
-                                }
-                            }
-                        }
+                        SelectedBucketInfoCard(
+                            title = "${selected.label}（${selected.range}）",
+                            hoursText = fmtHours(msToHours(selected.totalMs)),
+                            percentText = "佔比 $percent%",
+                        )
+
                     } else {
                         Text(
                             "提示：點擊長條圖可查看該時段佔比與詳細時長",
@@ -247,12 +233,21 @@ private fun SimpleBarChart(
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // ✅ 先在 Composable 區域把顏色取出（避免 Canvas 內呼叫 MaterialTheme）
-    val barColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+    // ✅ 顏色一定要在 Composable scope 先取出來（Canvas 內不要碰 MaterialTheme / LocalAppColors.current）
+    val appColors = LocalAppColors.current
+
+    val bucketColors = remember(appColors) {
+        listOf(
+            appColors.timeNightBg,    // 夜
+            appColors.timeMorningBg,  // 早
+            appColors.timeNoonBg,     // 中
+            appColors.timeEveningBg   // 晚
+        )
+    }
+
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     val selectedStroke = MaterialTheme.colorScheme.primary
-    val selectedBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
 
     val maxVal = remember(buckets) { buckets.maxOf { it.totalMs }.coerceAtLeast(1L) }
     val maxH = remember(maxVal) { msToHours(maxVal) }
@@ -260,16 +255,16 @@ private fun SimpleBarChart(
 
     var hitRects by remember { mutableStateOf<List<Rect>>(emptyList()) }
 
-    // ✅ nativeCanvas 文字 paint（不要在 Canvas 內 new 一堆）
+    // ✅ nativeCanvas 文字 paint：在 Composable 記住，避免 Canvas 內一直 new
     val labelPaint = remember(labelColor) {
         android.graphics.Paint().apply {
             isAntiAlias = true
             textAlign = android.graphics.Paint.Align.CENTER
             color = android.graphics.Color.argb(
-                (labelColor.alpha * 255).toInt(),
-                (labelColor.red * 255).toInt(),
-                (labelColor.green * 255).toInt(),
-                (labelColor.blue * 255).toInt()
+                (labelColor.alpha * 255).toInt().coerceIn(0, 255),
+                (labelColor.red * 255).toInt().coerceIn(0, 255),
+                (labelColor.green * 255).toInt().coerceIn(0, 255),
+                (labelColor.blue * 255).toInt().coerceIn(0, 255)
             )
             textSize = 30f
         }
@@ -279,7 +274,7 @@ private fun SimpleBarChart(
         modifier = modifier.pointerInput(buckets, hitRects) {
             detectTapGestures { offset ->
                 val idx = hitRects.indexOfFirst { it.contains(offset) }
-                if (idx != -1) onSelect(idx) // ✅ 0 時段也能點
+                if (idx != -1) onSelect(idx) // ✅ 0 時段也能點（靠 hitRect 覆蓋整欄）
             }
         }
     ) {
@@ -288,37 +283,38 @@ private fun SimpleBarChart(
         val bottomArea = 56f
         val chartH = h - bottomArea
 
-        // grid (Y 軸 1 小時單位)
+        // -------- grid (每 1 小時刻度) --------
         for (i in 0..ticks) {
-            val y = chartH - (chartH * (i.toFloat() / ticks))
+            val y = chartH - (chartH * (i.toFloat() / ticks.toFloat()))
             drawLine(gridColor, Offset(0f, y), Offset(w, y), 1.dp.toPx())
         }
 
-        // bars geometry：柱子更粗、間距更小
+        // -------- bars geometry：柱更粗、間距更小 --------
         val barGap = 12.dp.toPx()
-        val barW = (w - (barGap * (buckets.size - 1))) / buckets.size
-        val newRects = ArrayList<Rect>(buckets.size)
+        val barW = (w - (barGap * (buckets.size - 1))) / buckets.size.coerceAtLeast(1)
+        val rects = ArrayList<Rect>(buckets.size)
 
         buckets.forEachIndexed { i, b ->
+            val baseColor = bucketColors.getOrElse(i) { selectedStroke }
+
             val barH = chartH * (b.totalMs.toFloat() / maxVal.toFloat())
             val left = i * (barW + barGap)
             val top = chartH - barH
 
-            // ✅ hit rect 覆蓋整個欄位區（0 高度也能點）
-            val hit = Rect(left, 0f, left + barW, chartH)
-            newRects.add(hit)
+            // ✅ hit rect 覆蓋整欄（即使 barH=0 也能點）
+            rects.add(Rect(left, 0f, left + barW, chartH))
 
-            // ✅ selected 背景
+            // ✅ 選取背景（使用該時段色的淡底）
             if (selectedIndex == i) {
                 drawRect(
-                    color = selectedBg,
+                    color = baseColor.copy(alpha = 0.10f),
                     topLeft = Offset(left - 6f, 0f),
                     size = Size(barW + 12f, chartH)
                 )
             }
 
             // bar（0 時段畫淡柱）
-            val fill = if (b.totalMs > 0) barColor else barColor.copy(alpha = 0.12f)
+            val fill = if (b.totalMs > 0) baseColor.copy(alpha = 0.90f) else baseColor.copy(alpha = 0.15f)
             drawRect(
                 color = fill,
                 topLeft = Offset(left, top),
@@ -346,24 +342,76 @@ private fun SimpleBarChart(
             )
         }
 
-        hitRects = newRects
+        hitRects = rects
     }
 }
+
 
 
 // -------------------------
 // UI：列表（保留時段色碼膠囊 + 右側時長）
 // -------------------------
+
+@Composable
+private fun SelectedBucketInfoCard(
+    title: String,
+    hoursText: String,
+    percentText: String,
+    modifier: Modifier = Modifier
+) {
+    val accent =  MaterialTheme.colorScheme.secondary // ✅ 改這個
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.5.dp, accent.copy(alpha = 0.85f))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(6.dp)
+                    .height(52.dp)
+                    .background(accent.copy(alpha = 0.85f), RoundedCornerShape(999.dp))
+            )
+            Spacer(Modifier.width(12.dp))
+
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        hoursText,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        percentText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+            }
+        }
+    }
+}
+
+
 @Composable
 private fun SlotRowWithTimeBuckets(item: ScheduleSlotWithTask) {
     val title = item.taskTitle ?: item.slot.customTitle ?: "(無標題)"
     val durMs = (item.slot.endTimeMillis - item.slot.startTimeMillis).coerceAtLeast(0L)
     val durText = fmtHours(msToHours(durMs))
 
-    val nightColor = MaterialTheme.colorScheme.primary
-    val morningColor = MaterialTheme.colorScheme.secondary
-    val afternoonColor = MaterialTheme.colorScheme.tertiary
-    val eveningColor = MaterialTheme.colorScheme.error
+    val c = LocalAppColors.current
+    val nightColor = c.timeNight
+    val morningColor = c.timeMorning
+    val afternoonColor = c.timeNoon
+    val eveningColor = c.timeEvening
 
     val bucketIds = remember(item.slot.startTimeMillis, item.slot.endTimeMillis) {
         computeTimeBuckets(item.slot.startTimeMillis, item.slot.endTimeMillis)
@@ -425,10 +473,11 @@ private fun SlotRowWithTimeBuckets(item: ScheduleSlotWithTask) {
 
 @Composable
 private fun TimeBucketLegendRow() {
-    val nightColor = MaterialTheme.colorScheme.primary
-    val morningColor = MaterialTheme.colorScheme.secondary
-    val afternoonColor = MaterialTheme.colorScheme.tertiary
-    val eveningColor = MaterialTheme.colorScheme.error
+    val c = LocalAppColors.current
+    val nightColor = c.timeNightBg
+    val morningColor = c.timeMorningBg
+    val afternoonColor = c.timeNoonBg
+    val eveningColor = c.timeEveningBg
 
     Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
         TimeLegendDot(nightColor, "夜 00–06")
@@ -454,7 +503,7 @@ private fun TimeBucketPill(primary: Color, secondary: Color?, modifier: Modifier
         modifier = modifier
             .height(14.dp)
             .width(26.dp)
-            .background(primary.copy(alpha = 0.95f), shape)
+            .background(primary, shape)
     ) {
         if (secondary != null) {
             Box(
@@ -462,7 +511,7 @@ private fun TimeBucketPill(primary: Color, secondary: Color?, modifier: Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(0.5f)
                     .align(Alignment.CenterEnd)
-                    .background(secondary.copy(alpha = 0.95f), shape)
+                    .background(secondary, shape)
             )
         }
     }
@@ -527,13 +576,12 @@ private fun MetricCardEmphasis(
     value: String,
     modifier: Modifier = Modifier
 ) {
-    val borderColor = MaterialTheme.colorScheme.primary
 
     Card(
         modifier = modifier,
-        colors = cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+        colors = cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(2.dp, borderColor.copy(alpha = 0.85f))
+        border = BorderStroke(2.dp, MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f))
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -544,7 +592,7 @@ private fun MetricCardEmphasis(
                 modifier = Modifier
                     .width(6.dp)
                     .height(54.dp)
-                    .background(borderColor.copy(alpha = 0.85f), RoundedCornerShape(999.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f), RoundedCornerShape(999.dp))
             )
             Spacer(Modifier.width(12.dp))
 

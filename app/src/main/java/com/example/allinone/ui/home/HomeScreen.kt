@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import com.example.allinone.ui.theme.LocalAppColors
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -69,6 +70,8 @@ fun HomeScreen(
     onGoSchedule: () -> Unit,
     onGoAnalysis: () -> Unit
 ) {
+    val appColors = LocalAppColors.current
+
     val weather by viewModel.todayWeather.collectAsState()
     val active by viewModel.activeTaskCount.collectAsState()
     val today by viewModel.todayTodoCount.collectAsState()
@@ -144,7 +147,8 @@ fun HomeScreen(
                     subtitle = "待處理",
                     icon = Icons.Default.Today,
                     modifier = Modifier.weight(1f),
-                    container = MaterialTheme.colorScheme.secondaryContainer
+                    container = appColors.statusNotYet.copy(alpha = 0.25f),
+                    onClick = onGoTasks
                 )
                 MiniStatCard(
                     title = "統計代辦",
@@ -152,8 +156,10 @@ fun HomeScreen(
                     subtitle = "未完成任務",
                     icon = Icons.AutoMirrored.Filled.Assignment,
                     modifier = Modifier.weight(1f),
-                    container = MaterialTheme.colorScheme.tertiaryContainer
+                    container = appColors.timeMorning.copy(alpha = 0.25f),
+                    onClick = onGoTasks
                 )
+
             }
 
             Spacer(Modifier.height(14.dp))
@@ -314,10 +320,12 @@ private fun MiniStatCard(
     subtitle: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
-    container: Color
+    container: Color,
+    onClick: () -> Unit
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(containerColor = container),
         shape = RoundedCornerShape(22.dp)
     ) {

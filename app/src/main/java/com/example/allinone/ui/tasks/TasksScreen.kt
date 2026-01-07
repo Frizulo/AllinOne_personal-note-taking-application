@@ -29,6 +29,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.allinone.data.local.entities.TaskEntity
 import com.example.allinone.ui.components.StandardTaskCard
 import com.example.allinone.ui.components.TaskFilterChip
+import com.example.allinone.ui.theme.LocalAppColors
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -38,6 +39,8 @@ import java.util.*
 fun TasksScreen(
     viewModel: TasksViewModel
 ) {
+    val appColors = LocalAppColors.current
+
     var selectedQuadrants by remember { mutableStateOf(setOf(0, 1, 2, 3, 4)) }
     var selectedProgress by remember { mutableStateOf(setOf(0, 1, 2)) } // 改用數值對應資料表
     var searchQuery by remember { mutableStateOf("") }
@@ -88,7 +91,24 @@ fun TasksScreen(
                     Row(modifier = Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         val progressOptions = listOf("not yet" to 0, "in progress" to 1, "done" to 2)
                         progressOptions.forEach { (label, value) ->
-                            TaskFilterChip(label = label, isSelected = selectedProgress.contains(value)) {
+                            TaskFilterChip(
+                                label = label,
+                                isSelected = selectedProgress.contains(value),
+                                selectedContainerColor = when (value) {
+                                    0 -> appColors.statusNotYet
+                                    1 -> appColors.statusInProgress
+                                    2 -> appColors.statusDone
+                                    else -> MaterialTheme.colorScheme.primary
+                                },
+                                selectedLabelColor = when (value) {
+                                    0 -> appColors.statusNotYet
+                                    1 -> appColors.statusInProgress
+                                    2 -> appColors.statusDone
+                                    else -> MaterialTheme.colorScheme.primary
+                                },
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ) {
                                 selectedProgress = if (selectedProgress.contains(value)) selectedProgress - value else selectedProgress + value
                             }
                         }
@@ -281,11 +301,12 @@ private fun formatDate(ms: Long): String {
 
 @Composable
 fun getQuadrantColor(type: Int): Color {
+    val appColors = LocalAppColors.current
     return when (type) {
-        0 -> Color(0xFF79AFE3)
-        1 -> Color(0xFFE38684)
-        2 -> Color(0xFF66A869)
-        3 -> Color(0xFF925AA2)
+        0 -> appColors.quadrantImportantNotUrgent
+        1 -> appColors.quadrantImportantUrgent
+        2 -> appColors.quadrantNotImportantNotUrgent
+        3 -> appColors.quadrantNotImportantUrgent
         else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.8f)
     }
 }

@@ -78,7 +78,7 @@ fun TaskFormContent(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
-        Text("象限", style = MaterialTheme.typography.titleMedium)
+        Text("重要緊急程度", style = MaterialTheme.typography.titleMedium)
         Spacer(modifier = Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth().height(110.dp),

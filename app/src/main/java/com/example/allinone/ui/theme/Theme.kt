@@ -1,18 +1,17 @@
 package com.example.allinone.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.Typography
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 
 private val lightScheme = lightColorScheme(
@@ -255,6 +254,81 @@ val unspecified_scheme = ColorFamily(
     Color.Unspecified, Color.Unspecified, Color.Unspecified, Color.Unspecified
 )
 
+
+
+// ---------------- App semantic colors (固定色票，不受 dynamicColor 影響) ----------------
+data class AppSemanticColors(
+    val statusNotYet: Color,
+    val statusInProgress: Color,
+    val statusDone: Color,
+
+    val quadrantImportantNotUrgent: Color,
+    val quadrantImportantUrgent: Color,
+    val quadrantNotImportantNotUrgent: Color,
+    val quadrantNotImportantUrgent: Color,
+
+    val timeNight: Color,
+    val timeMorning: Color,
+    val timeNoon: Color,
+    val timeEvening: Color,
+
+    val timeNightBg: Color,
+    val timeMorningBg: Color,
+    val timeNoonBg: Color,
+    val timeEveningBg: Color,
+
+    val scheduleTaskAccent: Color,
+    val scheduleFreeAccent: Color,
+)
+
+private val LightSemanticColors = AppSemanticColors(
+    statusNotYet = StatusNotYet,
+    statusInProgress = StatusInProgress,
+    statusDone = StatusDone,
+
+    quadrantImportantNotUrgent = QuadrantImportantNotUrgent,
+    quadrantImportantUrgent = QuadrantImportantUrgent,
+    quadrantNotImportantNotUrgent = QuadrantNotImportantNotUrgent,
+    quadrantNotImportantUrgent = QuadrantNotImportantUrgent,
+
+    timeNight = TimeNight,
+    timeMorning = TimeMorning,
+    timeNoon = TimeNoon,
+    timeEvening = TimeEvening,
+    timeNightBg = TimeNight,
+    timeMorningBg = TimeMorning,
+    timeNoonBg = TimeNoon,
+    timeEveningBg = TimeEvening,
+
+    scheduleTaskAccent = ScheduleTaskAccent,
+    scheduleFreeAccent = ScheduleFreeAccent,
+)
+
+// Dark 版稍微提高亮度，避免偏暗（但仍保持一致）
+private val DarkSemanticColors = AppSemanticColors(
+    statusNotYet = StatusNotYet,
+    statusInProgress = StatusInProgress,
+    statusDone = StatusDone,
+
+    quadrantImportantNotUrgent = QuadrantImportantNotUrgent,
+    quadrantImportantUrgent = QuadrantImportantUrgent,
+    quadrantNotImportantNotUrgent = QuadrantNotImportantNotUrgent,
+    quadrantNotImportantUrgent = QuadrantNotImportantUrgent,
+
+    timeNight = TimeNight,
+    timeMorning = TimeMorning,
+    timeNoon = TimeNoon,
+    timeEvening = TimeEvening,
+    timeNightBg = TimeNight,
+    timeMorningBg = TimeMorning,
+    timeNoonBg = TimeNoon,
+    timeEveningBg = TimeEvening,
+
+    scheduleTaskAccent = ScheduleTaskAccent,
+    scheduleFreeAccent = ScheduleFreeAccent,
+)
+
+val LocalAppColors = staticCompositionLocalOf { LightSemanticColors }
 @Composable
 fun AppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -272,10 +346,14 @@ fun AppTheme(
         else -> lightScheme
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = AppTypography,
-        content = content
-    )
+    val semantic = if (darkTheme) DarkSemanticColors else LightSemanticColors
+
+    CompositionLocalProvider(LocalAppColors provides semantic) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = AppTypography,
+            content = content
+        )
+    }
 }
 
