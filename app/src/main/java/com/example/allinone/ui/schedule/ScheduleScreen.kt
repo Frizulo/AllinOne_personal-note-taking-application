@@ -776,7 +776,7 @@ private fun StatsRow4(stats: ScheduleRepository.ScheduleStats4x3) {
 
     @Composable
     fun bucketColor(label: String): Color = when (label) {
-        "睡" -> MaterialTheme.colorScheme.secondary
+        "夜" -> MaterialTheme.colorScheme.secondary
         "早" -> MaterialTheme.colorScheme.primary
         "中" -> MaterialTheme.colorScheme.tertiary
         "晚" -> MaterialTheme.colorScheme.error
@@ -784,7 +784,7 @@ private fun StatsRow4(stats: ScheduleRepository.ScheduleStats4x3) {
     }
 
     val entries = listOf(
-        Entry("睡", stats.sleepTotal, stats.sleepTask, stats.sleepFree, bucketColor("睡")),
+        Entry("夜", stats.sleepTotal, stats.sleepTask, stats.sleepFree, bucketColor("夜")),
         Entry("早", stats.morningTotal, stats.morningTask, stats.morningFree, bucketColor("早")),
         Entry("中", stats.afternoonTotal, stats.afternoonTask, stats.afternoonFree, bucketColor("中")),
         Entry("晚", stats.eveningTotal, stats.eveningTask, stats.eveningFree, bucketColor("晚")),

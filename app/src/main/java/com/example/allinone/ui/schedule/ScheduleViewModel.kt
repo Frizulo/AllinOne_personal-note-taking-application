@@ -34,7 +34,7 @@ import java.util.Calendar
 class ScheduleViewModel(
     private val tasksRepo: TasksRepository,
     private val scheduleRepo: ScheduleRepository,
-    private val tokenStore: TokenStore
+    tokenStore: TokenStore
 ) : ViewModel() {
 
     // -------------------------
@@ -104,14 +104,14 @@ class ScheduleViewModel(
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** ✅ 4x3 統計（睡/早/中/晚）×（Total/Task/Free） */
+    /** ✅ 4x3 統計（夜/早/中/晚）×（Total/Task/Free） */
     val stats4x3: StateFlow<ScheduleRepository.ScheduleStats4x3> =
-        combine(_selectedDayMillis, slotsWithTask) { day, slots ->
-            day to slots
-        }
-            .mapLatest { (day, slots) ->
+        slotsWithTask
+            .mapLatest { slots ->
                 withContext(Dispatchers.Default) {
-                    scheduleRepo.calculate4x3Stats(day, slots)
+                    val day0 = slots.firstOrNull()?.slot?.dateMillis
+                        ?: normalizeToStartOfDay(_selectedDayMillis.value)
+                    scheduleRepo.calculate4x3Stats(day0, slots)
                 }
             }
             .stateIn(
@@ -119,6 +119,7 @@ class ScheduleViewModel(
                 SharingStarted.WhileSubscribed(5_000),
                 ScheduleRepository.ScheduleStats4x3()
             )
+
 
     // Snackbar / Toast 訊息
     private val _message = MutableSharedFlow<String>(extraBufferCapacity = 1)
