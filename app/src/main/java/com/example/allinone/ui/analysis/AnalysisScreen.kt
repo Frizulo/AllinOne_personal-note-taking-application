@@ -66,7 +66,7 @@ fun AnalysisScreen(vm: AnalysisViewModel) {
             // -------------------------
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                colors = cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                 shape = RoundedCornerShape(18.dp)
             ) {
                 Column(Modifier.padding(16.dp)) {
@@ -375,7 +375,7 @@ private fun SelectedBucketInfoCard(
                 modifier = Modifier
                     .width(6.dp)
                     .height(52.dp)
-                    .background(accent.copy(alpha = 0.85f), RoundedCornerShape(999.dp))
+//                    .background(accent.copy(alpha = 0.85f), RoundedCornerShape(999.dp))
             )
             Spacer(Modifier.width(12.dp))
 
@@ -432,8 +432,7 @@ private fun SlotRowWithTimeBuckets(item: ScheduleSlotWithTask) {
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(16.dp)
+        colors = cardColors(containerColor = Color(0xFF7AB6E8).copy(0.1f)),
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
